@@ -46,7 +46,7 @@ async fn main() -> Result<(), Error> {
     // Create app state
     let state = AppState {
         db: db.clone(),
-        room: Arc::new(ws::Room::new(db.clone())),
+        room: Arc::new(ws::Room::new()),
     };
 
     // Build routes

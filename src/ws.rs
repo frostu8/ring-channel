@@ -2,15 +2,7 @@
 
 use axum::extract::ws::{CloseFrame, Message, WebSocket};
 
-use chrono::{DateTime, Utc};
-
-use duel_channel_model::{
-    ApiError,
-    battle::Battle,
-    message::{Message as ApiMessage, server::NewBattle},
-};
-
-use sqlx::SqlitePool;
+use duel_channel_model::{ApiError, message::Message as ApiMessage};
 
 use tokio::sync::broadcast::{self, Receiver, Sender, error::RecvError};
 
@@ -26,20 +18,20 @@ use crate::{
 /// This serves as a master object that can lease handles to new websockets.
 #[derive(Debug)]
 pub struct Room {
-    tx: Sender<RoomEvent>,
+    tx: Sender<ApiMessage>,
 }
 
 impl Room {
     /// Creates a new `Room`.
-    pub fn new(db: SqlitePool) -> Room {
+    pub fn new() -> Room {
         let (tx, _rx) = broadcast::channel(8);
 
         Room { tx }
     }
 
-    /// Sends an event to the room.
-    pub fn send(&self, event: RoomEvent) {
-        let _ = self.tx.send(event);
+    /// Broadcasts an event to the room.
+    pub fn broadcast(&self, message: ApiMessage) {
+        let _ = self.tx.send(message);
     }
 
     /// Serves a new client, with additional authentication information.
@@ -65,18 +57,11 @@ impl Room {
     }
 }
 
-/// An internal event given to a room.
-#[derive(Clone, Debug)]
-pub enum RoomEvent {
-    /// Bets are open! Get those wagers in!
-    NewBattle { battle: Battle },
-}
-
 /// A handle to a room.
 #[derive(Debug)]
 pub struct Handle {
     /// Events produced by the room.
-    pub rx: Receiver<RoomEvent>,
+    pub rx: Receiver<ApiMessage>,
 }
 
 struct WebSocketState {
@@ -178,23 +163,14 @@ async fn handle_message(state: &mut WebSocketState, message: Message) -> Result<
 
 /// Handles an internal server event.
 #[instrument(skip(state))]
-async fn handle_server_event(state: &mut WebSocketState, ev: RoomEvent) -> Result<(), AppError> {
-    match ev {
-        RoomEvent::NewBattle { battle } => {
-            // send battle information to user
-            let new_battle = NewBattle(battle);
-            let text =
-                serde_json::to_string(&ApiMessage::NewBattle(new_battle)).expect("valid json");
-            state
-                .ws
-                .send(Message::Text(text.into()))
-                .await
-                .map_err(AppErrorKind::WebSocket)?;
-        }
-        _ => (),
-    }
-
-    Ok(())
+async fn handle_server_event(state: &mut WebSocketState, msg: ApiMessage) -> Result<(), AppError> {
+    let text = serde_json::to_string(&msg).expect("valid json");
+    state
+        .ws
+        .send(Message::Text(text.into()))
+        .await
+        .map_err(AppErrorKind::WebSocket)
+        .map_err(From::from)
 }
 
 async fn send_close_message(ws: &mut WebSocket, code: u16, reason: impl Into<String>) {

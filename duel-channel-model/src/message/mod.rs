@@ -1,5 +1,7 @@
 //! WebSocket events.
 
+use derive_more::From;
+
 use serde::{Deserialize, Serialize};
 
 use crate::message::server::NewBattle;
@@ -9,7 +11,7 @@ pub mod server;
 /// A WebSocket message.
 ///
 /// This has both client and server messages.
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize, From)]
 #[serde(tag = "op", content = "d", rename_all = "kebab-case")]
 pub enum Message {
     /// A server notification for a new battle.

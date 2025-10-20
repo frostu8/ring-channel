@@ -4,16 +4,15 @@ use axum::extract::State;
 
 use chrono::{TimeDelta, Utc};
 
-use duel_channel_model::{battle::Battle, request::battle::CreateBattleRequest};
+use duel_channel_model::{
+    battle::Battle, message::server::NewBattle, request::battle::CreateBattleRequest,
+};
 
 use http::StatusCode;
 
 use uuid::Uuid;
 
-use crate::{
-    app::{AppError, AppJson, AppState, Payload},
-    ws::RoomEvent,
-};
+use crate::app::{AppError, AppJson, AppState, Payload};
 
 /// Creates a match.
 pub async fn create(
@@ -88,9 +87,7 @@ pub async fn create(
     };
 
     // Send the notice of the new battle to all connected clients
-    state.room.send(RoomEvent::NewBattle {
-        battle: battle.clone(),
-    });
+    state.room.broadcast(NewBattle(battle.clone()).into());
 
     Ok((StatusCode::CREATED, AppJson(battle)))
 }
