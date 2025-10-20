@@ -2,6 +2,8 @@
 
 use axum::extract::ws::{CloseFrame, Message, WebSocket};
 
+use chrono::{DateTime, Utc};
+
 use duel_channel_model::{
     ApiError,
     battle::Battle,
@@ -10,10 +12,7 @@ use duel_channel_model::{
 
 use sqlx::SqlitePool;
 
-use tokio::{
-    sync::broadcast::{self, Receiver, Sender, WeakSender, error::RecvError},
-    task::JoinHandle,
-};
+use tokio::sync::broadcast::{self, Receiver, Sender, error::RecvError};
 
 use tracing::instrument;
 
@@ -28,23 +27,14 @@ use crate::{
 #[derive(Debug)]
 pub struct Room {
     tx: Sender<RoomEvent>,
-    _handle: JoinHandle<()>,
 }
 
 impl Room {
     /// Creates a new `Room`.
-    ///
-    /// This spins up a maintenance task for the room.
     pub fn new(db: SqlitePool) -> Room {
-        let (tx, rx) = broadcast::channel(8);
+        let (tx, _rx) = broadcast::channel(8);
 
-        // create maintenance task
-        let handle = tokio::spawn(run(db, tx.downgrade(), rx));
-
-        Room {
-            tx,
-            _handle: handle,
-        }
+        Room { tx }
     }
 
     /// Sends an event to the room.
@@ -79,7 +69,7 @@ impl Room {
 #[derive(Clone, Debug)]
 pub enum RoomEvent {
     /// Bets are open! Get those wagers in!
-    NewBattle(Battle),
+    NewBattle { battle: Battle },
 }
 
 /// A handle to a room.
@@ -190,7 +180,7 @@ async fn handle_message(state: &mut WebSocketState, message: Message) -> Result<
 #[instrument(skip(state))]
 async fn handle_server_event(state: &mut WebSocketState, ev: RoomEvent) -> Result<(), AppError> {
     match ev {
-        RoomEvent::NewBattle(battle) => {
+        RoomEvent::NewBattle { battle } => {
             // send battle information to user
             let new_battle = NewBattle(battle);
             let text =
@@ -201,6 +191,7 @@ async fn handle_server_event(state: &mut WebSocketState, ev: RoomEvent) -> Resul
                 .await
                 .map_err(AppErrorKind::WebSocket)?;
         }
+        _ => (),
     }
 
     Ok(())
@@ -213,25 +204,4 @@ async fn send_close_message(ws: &mut WebSocket, code: u16, reason: impl Into<Str
             reason: reason.into().into(),
         })))
         .await;
-}
-
-/// An administrative task for [`Room`].
-#[instrument(skip(db, tx, rx))]
-async fn run(db: SqlitePool, tx: WeakSender<RoomEvent>, mut rx: Receiver<RoomEvent>) {
-    loop {
-        let ev = rx.recv().await;
-
-        match ev {
-            Ok(RoomEvent::NewBattle(battle)) => {
-                // New battle started! Wait for
-            }
-            // Lagged errors are fine
-            Err(RecvError::Lagged(err)) => {
-                tracing::warn!("ws room lagged: {}", err);
-            }
-            Err(RecvError::Closed) => break,
-        }
-    }
-
-    tracing::info!("room closed")
 }

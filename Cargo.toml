@@ -19,7 +19,7 @@ futures-util = "0.3"
 http = "1"
 serde = { workspace = true }
 sqlx = { version = "0.8.6", features = ["runtime-tokio", "sqlite", "chrono"] }
-tokio = { version = "1", features = ["rt", "rt-multi-thread", "macros", "signal", "sync"] }
+tokio = { version = "1", features = ["rt", "rt-multi-thread", "macros", "signal", "sync", "time"] }
 tower = "0.5"
 tower-http = { version = "0.6", features = ["trace", "compression-deflate"] }
 tracing = "0.1"

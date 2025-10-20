@@ -30,14 +30,15 @@ pub async fn create(
 
     let (match_id,) = sqlx::query_as::<_, (i32,)>(
         r#"
-        INSERT INTO battle (uuid, level_name, accepting_bets, inserted_at, updated_at)
-        VALUES ($1, $2, TRUE, $3, $3)
+        INSERT INTO battle (uuid, level_name, closed_at, inserted_at, updated_at)
+        VALUES ($1, $2, $4, $3, $3)
         RETURNING id
         "#,
     )
     .bind(&uuid)
     .bind(&request.level_name)
     .bind(now)
+    .bind(closed_at)
     .fetch_one(&mut *tx)
     .await?;
 
@@ -87,7 +88,9 @@ pub async fn create(
     };
 
     // Send the notice of the new battle to all connected clients
-    state.room.send(RoomEvent::NewBattle(battle.clone()));
+    state.room.send(RoomEvent::NewBattle {
+        battle: battle.clone(),
+    });
 
     Ok((StatusCode::CREATED, AppJson(battle)))
 }

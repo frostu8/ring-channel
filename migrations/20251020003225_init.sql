@@ -22,11 +22,11 @@ CREATE TABLE battle (
     id INTEGER PRIMARY KEY,
     uuid CHAR(36) NOT NULL UNIQUE,
     level_name VARCHAR(255) NOT NULL,
-    -- Whether bets are accepted right now
-    accepting_bets BOOLEAN NOT NULL,
     -- The victor of the match
     -- 0 for red, 1 for blue
     victor INTEGER,
+    -- The time of wagers closing for this match
+    closed_at TIMESTAMP NOT NULL,
     inserted_at TIMESTAMP NOT NULL,
     updated_at TIMESTAMP NOT NULL
 );
