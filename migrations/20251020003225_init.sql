@@ -8,6 +8,16 @@ CREATE TABLE user (
     updated_at TIMESTAMP NOT NULL
 );
 
+-- A list of Discord authentications
+CREATE TABLE discord_auth (
+    id INTEGER PRIMARY KEY,
+    user_id INTEGER NOT NULL UNIQUE REFERENCES user(id),
+    discord_id BIGINT NOT NULL UNIQUE,
+    refresh_token VARCHAR(255) NOT NULL,
+    inserted_at TIMESTAMP NOT NULL,
+    updated_at TIMESTAMP NOT NULL
+);
+
 -- A list of RR profiles
 CREATE TABLE player (
     id INTEGER PRIMARY KEY,

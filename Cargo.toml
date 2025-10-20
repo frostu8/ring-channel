@@ -27,6 +27,14 @@ tracing-subscriber = "0.3"
 serde_repr = { workspace = true }
 uuid = { version = "1", features = ["v4"] }
 serde_json = "1"
+tower-sessions = { version = "0.14", default-features = false, features = ["axum-core"] }
+tower-sessions-moka-store = "0.15"
+time = "0.3"
+rand = "0.9"
+oauth2 = "5"
+reqwest = "0.12"
+twilight-model = "0.16"
+twilight-http = "0.16"
 
 [workspace]
 resolver = "3"

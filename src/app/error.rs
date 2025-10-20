@@ -21,6 +21,8 @@ use ring_channel_model::ApiError;
 
 use crate::app::AppJson;
 
+pub type BoxError = Box<dyn Error + Send + Sync + 'static>;
+
 /// Application error that may occur during the processing of a request.
 ///
 /// This includes both internal errors and user errors.
@@ -31,6 +33,14 @@ pub struct AppError {
 }
 
 impl AppError {
+    /// Constucts an internal error.
+    pub fn new<E: Error + Send + Sync + 'static>(e: E) -> AppError {
+        AppError {
+            kind: AppErrorKind::Other(Box::new(e)),
+            message: None,
+        }
+    }
+
     /// The inner [`AppErrorKind`] of the error.
     pub fn kind(&self) -> &AppErrorKind {
         &self.kind
@@ -45,7 +55,12 @@ impl AppError {
     pub fn is_internal(&self) -> bool {
         matches!(
             self.kind,
-            AppErrorKind::Database(_) | AppErrorKind::WebSocket(_)
+            AppErrorKind::Database(_)
+                | AppErrorKind::WebSocket(_)
+                | AppErrorKind::Session(_)
+                | AppErrorKind::HttpClient(_)
+                | AppErrorKind::Discord(_)
+                | AppErrorKind::Other(_)
         )
     }
 
@@ -87,6 +102,18 @@ impl AppError {
                     message: "Missing request content type.".into(),
                 },
             ),
+            AppErrorKind::InvalidState { .. } => (
+                StatusCode::BAD_REQUEST,
+                ApiError {
+                    message: "Invalid state sent.".into(),
+                },
+            ),
+            AppErrorKind::SessionFetch((code, message)) => (
+                code,
+                ApiError {
+                    message: message.into(),
+                },
+            ),
             // fallthrough for internal server errors not turned into user
             // errors here
             _error_kind => (
@@ -121,7 +148,11 @@ impl Error for AppError {
             AppErrorKind::Json(err) => Some(err),
             AppErrorKind::Form(err) => Some(err),
             AppErrorKind::Database(err) => Some(err),
+            AppErrorKind::Session(err) => Some(err),
             AppErrorKind::WebSocket(err) => Some(err),
+            AppErrorKind::HttpClient(err) => Some(err),
+            AppErrorKind::Discord(err) => Some(err),
+            AppErrorKind::Other(err) => err.source(),
             _ => None,
         }
     }
@@ -154,12 +185,32 @@ pub enum AppErrorKind {
     /// A content type was not provided.
     MissingContentType,
     /// The server cannot serve this content type.
+    #[from(ignore)]
     UnsupportedContentType(String),
+    /// An error with the session occured.
+    #[display("{} {}: {}", _0.0, _0.0.canonical_reason().unwrap_or("Error"), _0.1)]
+    #[from(ignore)]
+    SessionFetch((StatusCode, &'static str)),
+    /// An error getting session data occured.
+    Session(tower_sessions::session::Error),
+    /// A request to the Discord API failed.
+    Discord(twilight_http::Error),
+    /// An HTTP request failed.
+    HttpClient(reqwest::Error),
+    /// Invalid state in OAuth2 grant flow detected.
+    #[from(ignore)]
+    InvalidState { state: String },
     /// A websocket error occured.
     #[from(ignore)]
     WebSocket(axum::Error),
     /// An unhandled database error occured.
     Database(sqlx::Error),
+    /// An error happened.
+    ///
+    /// Only the message is preserved! All errors of this kind are internal.
+    /// Use as a last resort.
+    #[from(ignore)]
+    Other(BoxError),
 }
 
 impl IntoResponse for AppError {

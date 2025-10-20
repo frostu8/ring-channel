@@ -1,5 +1,8 @@
 use std::{net::SocketAddr, sync::Arc};
 
+// :(
+use time::Duration;
+
 use axum::{
     Router,
     extract::{MatchedPath, Request},
@@ -12,6 +15,7 @@ use axum_server::Handle;
 
 use ring_channel::{
     app::{AppError, AppState},
+    auth::oauth2::OauthState,
     config::read_config,
     routes, ws,
 };
@@ -23,6 +27,9 @@ use sqlx::pool::PoolOptions;
 use tokio::{main, select, signal};
 
 use tower_http::trace::TraceLayer;
+
+use tower_sessions::{Expiry, SessionManagerLayer, cookie::SameSite};
+use tower_sessions_moka_store::MokaStore;
 
 #[main]
 async fn main() -> Result<(), Error> {
@@ -49,8 +56,16 @@ async fn main() -> Result<(), Error> {
         room: Arc::new(ws::Room::new()),
     };
 
+    // Create session management for oauth flows
+    let session_store = MokaStore::new(Some(2_000));
+    let session_layer = SessionManagerLayer::new(session_store)
+        .with_name("sid")
+        .with_expiry(Expiry::OnInactivity(Duration::minutes(30)))
+        .with_same_site(SameSite::Lax)
+        .with_secure(config.server.secure_sessions);
+
     // Build routes
-    let router = Router::<AppState>::new()
+    let mut router = Router::<AppState>::new()
         .route("/ws", get(routes::ws::handler))
         .nest(
             "/matches",
@@ -61,6 +76,29 @@ async fn main() -> Result<(), Error> {
                     Router::<AppState>::new().route("/wagers", post(routes::battle::wager::create)),
                 ),
         )
+        .with_state(state);
+
+    if let Some(discord_config) = config.discord.as_ref() {
+        let oauth_state = OauthState::new(&config.server.base_url, db.clone(), &discord_config)?
+            .with_redirect_to(config.server.redirect_url.clone());
+
+        router = router.nest(
+            "/auth",
+            Router::<OauthState>::new()
+                .route("/redirect", get(routes::auth::redirect))
+                .route("/token", get(routes::auth::token))
+                .with_state(oauth_state)
+                .layer(session_layer),
+        );
+
+        tracing::info!(
+            client_id = { discord_config.client_id },
+            "discord integration setup"
+        );
+    }
+
+    // Finalize router
+    let router = router
         .layer(
             TraceLayer::new_for_http()
                 .make_span_with(|req: &Request| {
@@ -79,8 +117,7 @@ async fn main() -> Result<(), Error> {
                 // logging of errors so disable that
                 .on_failure(()),
         )
-        .layer(from_fn(log_app_errors))
-        .with_state(state);
+        .layer(from_fn(log_app_errors));
 
     let handle = Handle::new();
 

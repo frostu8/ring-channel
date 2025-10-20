@@ -1,5 +1,7 @@
 //! User authentication.
 
+pub mod oauth2;
+
 use axum::extract::{FromRef, FromRequestParts};
 
 use derive_more::Deref;

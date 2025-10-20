@@ -12,11 +12,13 @@ use ring_channel_model::{
 
 use http::StatusCode;
 
+use tracing::instrument;
 use uuid::Uuid;
 
 use crate::app::{AppError, AppJson, AppState, Payload};
 
 /// Creates a match.
+#[instrument(skip(state))]
 pub async fn create(
     State(state): State<AppState>,
     Payload(request): Payload<CreateBattleRequest>,
