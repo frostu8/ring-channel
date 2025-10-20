@@ -54,7 +54,12 @@ async fn main() -> Result<(), Error> {
         .route("/ws", get(routes::ws::handler))
         .nest(
             "/matches",
-            Router::<AppState>::new().route("/", post(routes::battle::create)),
+            Router::<AppState>::new()
+                .route("/", post(routes::battle::create))
+                .nest(
+                    "/{battle_id}",
+                    Router::<AppState>::new().route("/wager", post(routes::battle::wager::create)),
+                ),
         )
         .layer(
             TraceLayer::new_for_http()

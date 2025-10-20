@@ -1,5 +1,7 @@
 //! Match management routes.
 
+pub mod wager;
+
 use axum::extract::State;
 
 use chrono::{TimeDelta, Utc};

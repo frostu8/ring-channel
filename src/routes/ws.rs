@@ -9,7 +9,7 @@ use crate::{app::AppState, auth::AuthenticatedUser};
 
 /// Establishes a connection to the websocket gateway.
 pub async fn handler(
-    //user: AuthenticatedUser,
+    user: AuthenticatedUser,
     State(state): State<AppState>,
     ws: WebSocketUpgrade,
 ) -> Response {
