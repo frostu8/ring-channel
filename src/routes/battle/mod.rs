@@ -6,7 +6,7 @@ use axum::extract::State;
 
 use chrono::{TimeDelta, Utc};
 
-use duel_channel_model::{
+use ring_channel_model::{
     battle::Battle, message::server::NewBattle, request::battle::CreateBattleRequest,
 };
 

@@ -2,7 +2,7 @@
 
 use axum::extract::ws::{CloseFrame, Message, WebSocket};
 
-use duel_channel_model::{ApiError, message::Message as ApiMessage};
+use ring_channel_model::{ApiError, message::Message as ApiMessage};
 
 use tokio::sync::broadcast::{self, Receiver, Sender, error::RecvError};
 

@@ -408,43 +408,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1aaf95b3e5c8f23aa320147307562d361db0ae0d51242340f558153b4eb2439b"
 
 [[package]]
-name = "duel-channel"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "axum",
- "axum-server",
- "chrono",
- "derive_more",
- "dotenv",
- "duel-channel-model",
- "figment",
- "futures-util",
- "http",
- "serde",
- "serde_json",
- "serde_repr",
- "sqlx",
- "tokio",
- "tower",
- "tower-http",
- "tracing",
- "tracing-subscriber",
- "uuid",
-]
-
-[[package]]
-name = "duel-channel-model"
-version = "0.1.0"
-dependencies = [
- "chrono",
- "derive_more",
- "num_enum",
- "serde",
- "serde_repr",
-]
-
-[[package]]
 name = "either"
 version = "1.15.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1434,6 +1397,43 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ed2bf2547551a7053d6fdfafda3f938979645c44812fbfcda098faae3f1a362d"
 dependencies = [
  "bitflags",
+]
+
+[[package]]
+name = "ring-channel"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "axum",
+ "axum-server",
+ "chrono",
+ "derive_more",
+ "dotenv",
+ "figment",
+ "futures-util",
+ "http",
+ "ring-channel-model",
+ "serde",
+ "serde_json",
+ "serde_repr",
+ "sqlx",
+ "tokio",
+ "tower",
+ "tower-http",
+ "tracing",
+ "tracing-subscriber",
+ "uuid",
+]
+
+[[package]]
+name = "ring-channel-model"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "derive_more",
+ "num_enum",
+ "serde",
+ "serde_repr",
 ]
 
 [[package]]

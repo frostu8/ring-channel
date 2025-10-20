@@ -10,7 +10,7 @@ use axum::{
 
 use axum_server::Handle;
 
-use duel_channel::{
+use ring_channel::{
     app::{AppError, AppState},
     config::read_config,
     routes, ws,

@@ -1,5 +1,5 @@
 [package]
-name = "duel-channel"
+name = "ring-channel"
 version = "0.1.0"
 authors = ["Dante Helmore <frostu8@protonmail.com>"]
 edition.workspace = true
@@ -7,7 +7,7 @@ edition.workspace = true
 description = "Backend for duelchannel.ringrace.rs"
 
 [dependencies]
-duel-channel-model = { workspace = true }
+ring-channel-model = { workspace = true }
 anyhow = "1"
 axum = { version = "0.8", features = ["macros", "ws"] }
 axum-server = "0.7"
@@ -30,7 +30,7 @@ serde_json = "1"
 
 [workspace]
 resolver = "3"
-members = ["duel-channel-model"]
+members = ["model"]
 
 [workspace.package]
 edition = "2024"
@@ -38,7 +38,7 @@ edition = "2024"
 [workspace.dependencies]
 chrono = { version = "0.4", features = ["serde"] }
 derive_more = "2"
-duel-channel-model = { path = "./duel-channel-model" }
+ring-channel-model = { path = "./model" }
 num_enum = "0.7"
 serde = { version = "1", features = ["derive"] }
 serde_repr = "0.1"

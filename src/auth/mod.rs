@@ -1,9 +1,11 @@
 //! User authentication.
 
 use axum::extract::{FromRef, FromRequestParts};
+
 use derive_more::Deref;
 
-use duel_channel_model::user::User;
+use ring_channel_model::user::User;
+
 use http::request::Parts;
 
 use crate::app::{AppError, AppState};

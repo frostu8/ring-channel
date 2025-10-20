@@ -1,6 +1,6 @@
 //! Wager routes.
 
-use duel_channel_model::battle::BattleWager;
+use ring_channel_model::battle::BattleWager;
 
 use crate::{
     app::{AppError, AppJson},

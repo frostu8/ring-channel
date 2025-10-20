@@ -17,7 +17,7 @@ use derive_more::{Display, From};
 
 use http::StatusCode;
 
-use duel_channel_model::ApiError;
+use ring_channel_model::ApiError;
 
 use crate::app::AppJson;
 
