@@ -58,7 +58,7 @@ async fn main() -> Result<(), Error> {
                 .route("/", post(routes::battle::create))
                 .nest(
                     "/{battle_id}",
-                    Router::<AppState>::new().route("/wager", post(routes::battle::wager::create)),
+                    Router::<AppState>::new().route("/wagers", post(routes::battle::wager::create)),
                 ),
         )
         .layer(
