@@ -5,12 +5,15 @@ use axum::{
     extract::{MatchedPath, Request},
     middleware::{Next, from_fn},
     response::Response,
+    routing::{get, post},
 };
 
 use axum_server::Handle;
+
 use duel_channel::{
     app::{AppError, AppState},
     config::read_config,
+    routes, ws,
 };
 
 use anyhow::Error;
@@ -41,10 +44,18 @@ async fn main() -> Result<(), Error> {
     let db = PoolOptions::new().connect(&database_url).await?;
 
     // Create app state
-    let state = AppState { db: db.clone() };
+    let state = AppState {
+        db: db.clone(),
+        room: Arc::new(ws::Room::new(db.clone())),
+    };
 
     // Build routes
     let router = Router::<AppState>::new()
+        .route("/ws", get(routes::ws::handler))
+        .nest(
+            "/matches",
+            Router::<AppState>::new().route("/", post(routes::battle::create)),
+        )
         .layer(
             TraceLayer::new_for_http()
                 .make_span_with(|req: &Request| {

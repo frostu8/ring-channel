@@ -1,0 +1,24 @@
+openapi: 3.0.4
+info:
+  title: Duel Channel API
+  description: Access API for the Duel Channel Ring Racers server. Salt at the
+    next level!
+  version: 0.1.0
+
+servers:
+  - url: https://duelchannel.ringrace.rs/api/v1
+    description: The main API server.
+
+paths:
+  /matches:
+    post:
+      summary: Creates a new match.
+      description: Given the specifications of the match, starts a new match,
+        notifying all clients currently connected.
+      responses:
+        "201":
+          description: The resulting battle.
+          content:
+            application/json:
+              schema:
+                
