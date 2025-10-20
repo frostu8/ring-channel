@@ -1,0 +1,124 @@
+use std::{net::SocketAddr, sync::Arc};
+
+use axum::{
+    Router,
+    extract::{MatchedPath, Request},
+    middleware::{Next, from_fn},
+    response::Response,
+};
+
+use axum_server::Handle;
+use duel_channel::{
+    app::{AppError, AppState},
+    config::read_config,
+};
+
+use anyhow::Error;
+
+use sqlx::pool::PoolOptions;
+
+use tokio::{main, select, signal};
+
+use tower_http::trace::TraceLayer;
+
+#[main]
+async fn main() -> Result<(), Error> {
+    dotenv::dotenv().ok();
+    tracing_subscriber::fmt::init();
+
+    // Read config file
+    let config = Arc::new(read_config("config.toml")?);
+
+    tracing::info!("establishing connection to database");
+
+    let database_url = config
+        .server
+        .database_url
+        .clone()
+        .ok_or_else(|| Error::msg("No `DATABASE_URL` set!"))?;
+
+    // Connect to sqlite database
+    let db = PoolOptions::new().connect(&database_url).await?;
+
+    // Create app state
+    let state = AppState { db: db.clone() };
+
+    // Build routes
+    let router = Router::<AppState>::new()
+        .layer(
+            TraceLayer::new_for_http()
+                .make_span_with(|req: &Request| {
+                    let method = req.method();
+                    let uri = req.uri();
+
+                    // axum automatically adds this extension.
+                    let matched_path = req
+                        .extensions()
+                        .get::<MatchedPath>()
+                        .map(|matched_path| matched_path.as_str());
+
+                    tracing::debug_span!("request", %method, %uri, matched_path)
+                })
+                // By default `TraceLayer` will log 5xx responses but we're doing our specific
+                // logging of errors so disable that
+                .on_failure(()),
+        )
+        .layer(from_fn(log_app_errors))
+        .with_state(state);
+
+    let handle = Handle::new();
+
+    // run shutdown task to detect shutdowns
+    tokio::spawn(shutdown_signal(handle.clone()));
+
+    let addr: SocketAddr = ([0, 0, 0, 0], config.http.port).into();
+
+    tracing::info!("listening on {} (http)", addr);
+
+    axum_server::bind(addr)
+        .handle(handle)
+        .serve(router.into_make_service())
+        .await?;
+
+    tracing::info!("shutting down");
+
+    db.close().await;
+
+    Ok(())
+}
+
+// Stolen from: https://github.com/tokio-rs/axum/blob/main/examples/error-handling/src/main.rs
+async fn log_app_errors(request: Request, next: Next) -> Response {
+    let response = next.run(request).await;
+    // If the response contains an AppError Extension, log it.
+    if let Some(err) = response.extensions().get::<Arc<AppError>>() {
+        tracing::error!(?err, "an unexpected error occurred inside a handler");
+    }
+    response
+}
+
+// Stolen from: https://github.com/maxcountryman/tower-sessions-stores/tree/main/sqlx-store
+// Lol
+async fn shutdown_signal(handle: Handle) {
+    let ctrl_c = async {
+        signal::ctrl_c()
+            .await
+            .expect("failed to install Ctrl+C handler");
+    };
+
+    #[cfg(unix)]
+    let terminate = async {
+        signal::unix::signal(signal::unix::SignalKind::terminate())
+            .expect("failed to install signal handler")
+            .recv()
+            .await;
+    };
+
+    #[cfg(not(unix))]
+    let terminate = std::future::pending::<()>();
+
+    select! {
+        _ = ctrl_c => { handle.shutdown() }
+        _ = terminate => { handle.shutdown() }
+    }
+}

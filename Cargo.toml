@@ -1,0 +1,23 @@
+[package]
+name = "duel-channel"
+version = "0.1.0"
+authors = ["Dante Helmore <frostu8@protonmail.com>"]
+edition = "2024"
+
+description = "Backend for duelchannel.ringrace.rs"
+
+[dependencies]
+anyhow = "1"
+axum = { version = "0.8", features = ["macros"] }
+axum-server = "0.7"
+derive_more = { version = "2", features = ["display", "error", "from", "deref"] }
+dotenv = "0.15"
+figment = { version = "0.10", features = ["env", "toml"] }
+http = "1"
+serde = { version = "1", features = ["derive"] }
+sqlx = { version = "0.8.6", features = ["runtime-tokio", "sqlite"] }
+tokio = { version = "1", features = ["rt", "rt-multi-thread", "macros", "signal"] }
+tower = "0.5"
+tower-http = { version = "0.6", features = ["trace", "compression-deflate"] }
+tracing = "0.1"
+tracing-subscriber = "0.3"
