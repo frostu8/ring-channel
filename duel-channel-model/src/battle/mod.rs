@@ -28,7 +28,7 @@ pub struct Battle {
     /// The victor of the battle.
     ///
     /// May be `None` if the battle hasn't concluded.
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub victor: Option<PlayerTeam>,
     /// When wagers close at. Get them in!
     pub closed_at: Option<DateTime<Utc>>,
