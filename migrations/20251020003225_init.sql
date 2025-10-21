@@ -21,6 +21,7 @@ CREATE TABLE discord_auth (
 -- A list of RR profiles
 CREATE TABLE player (
     id INTEGER PRIMARY KEY,
+    short_id CHAR(6) NOT NULL UNIQUE,
     display_name VARCHAR(255) NOT NULL,
     public_key CHAR(64) NOT NULL UNIQUE,
     inserted_at TIMESTAMP NOT NULL,
@@ -42,6 +43,7 @@ CREATE TABLE battle (
 );
 
 CREATE TABLE participant (
+    id INTEGER PRIMARY KEY,
     match_id INTEGER NOT NULL REFERENCES battle(id),
     player_id INTEGER NOT NULL REFERENCES player(id),
     team INTEGER NOT NULL,

@@ -5,7 +5,6 @@
 pub mod app;
 pub mod auth;
 pub mod config;
-pub mod player;
 pub mod routes;
 pub mod session;
 pub mod ws;

@@ -77,6 +77,7 @@ impl AppError {
                 | AppErrorKind::Session(_)
                 | AppErrorKind::HttpClient(_)
                 | AppErrorKind::Discord(_)
+                | AppErrorKind::OutOfIds
                 | AppErrorKind::Other(_)
         )
     }
@@ -241,6 +242,9 @@ pub enum AppErrorKind {
     WebSocket(axum::Error),
     /// An unhandled database error occured.
     Database(sqlx::Error),
+    /// The application failed to generate a unique id.
+    #[display("Ran out of ids")]
+    OutOfIds,
     /// An error happened.
     ///
     /// Only the message is preserved! All errors of this kind are internal.

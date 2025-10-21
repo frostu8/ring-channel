@@ -68,8 +68,8 @@ async fn main() -> Result<(), Error> {
     let mut router = Router::<AppState>::new()
         .route("/ws", get(routes::ws::handler))
         .nest(
-            "/players/{rrid}",
-            Router::<AppState>::new().route("/", put(routes::player::register)),
+            "/players",
+            Router::<AppState>::new().route("/", post(routes::player::register)),
         )
         .nest(
             "/matches",
@@ -79,7 +79,7 @@ async fn main() -> Result<(), Error> {
                     "/{battle_id}",
                     Router::<AppState>::new()
                         .route(
-                            "/placements/{rrid}",
+                            "/placements/{short_id}",
                             patch(routes::battle::update_placement),
                         )
                         .route("/wagers", post(routes::battle::wager::create)),

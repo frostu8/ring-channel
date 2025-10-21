@@ -12,11 +12,14 @@ use serde::{
 /// A player on the Ring Racers server.
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Player {
-    /// The id of the player.
+    /// The 6-digit short id for the player.
+    pub id: String,
+    /// The public rrid of the player.
     ///
     /// The base16 encoded public key of the player, which is a 64-character
-    /// string.
-    pub id: Rrid,
+    /// string. Encoded in full; while this does uniquely identify the player,
+    /// the server will generate a short code for them.
+    pub public_key: Rrid,
     /// The last display name used by the player.
     pub display_name: String,
 }
@@ -52,6 +55,22 @@ impl Rrid {
     /// Represents the Rrid as a string.
     pub fn as_str(&self) -> &str {
         <Self as AsRef<str>>::as_ref(self)
+    }
+}
+
+impl TryFrom<String> for Rrid {
+    type Error = RridParseError;
+
+    fn try_from(value: String) -> Result<Self, Self::Error> {
+        value.parse()
+    }
+}
+
+impl TryFrom<&str> for Rrid {
+    type Error = RridParseError;
+
+    fn try_from(value: &str) -> Result<Self, Self::Error> {
+        value.parse()
     }
 }
 

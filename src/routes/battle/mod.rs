@@ -16,13 +16,12 @@ use ring_channel_model::{
 use http::StatusCode;
 
 use sqlx::FromRow;
+
 use tracing::instrument;
+
 use uuid::Uuid;
 
-use crate::{
-    app::{AppError, AppJson, AppState, Payload, error::AppErrorKind},
-    player::UpsertPlayer,
-};
+use crate::app::{AppError, AppJson, AppState, Payload, error::AppErrorKind};
 
 /// Creates a match.
 #[instrument(skip(state))]
@@ -30,6 +29,15 @@ pub async fn create(
     State(state): State<AppState>,
     Payload(request): Payload<CreateBattleRequest>,
 ) -> Result<(StatusCode, AppJson<Battle>), AppError> {
+    #[derive(FromRow)]
+    struct PlayerQuery {
+        id: i32,
+        short_id: String,
+        display_name: String,
+        #[sqlx(try_from = "String")]
+        public_key: Rrid,
+    }
+
     let mut tx = state.db.begin().await?;
 
     // Create the battle
@@ -52,22 +60,53 @@ pub async fn create(
     .fetch_one(&mut *tx)
     .await?;
 
-    // re-register players
-    for player in request.participants.iter() {
-        let UpsertPlayer { id, .. } = crate::player::upsert_player(player, &mut *tx).await?;
-
-        // add player to match
-        sqlx::query(
+    // register players
+    let mut participants = Vec::with_capacity(request.participants.len());
+    for input_player in request.participants.iter() {
+        // find player
+        let player = sqlx::query_as::<_, PlayerQuery>(
             r#"
-            INSERT INTO participant (match_id, player_id, team)
-            VALUES ($1, $2, $3)
+            SELECT id, short_id, display_name, public_key
+            FROM player
+            WHERE short_id = $1
             "#,
         )
-        .bind(match_id)
-        .bind(id)
-        .bind(u8::from(player.team))
-        .execute(&mut *tx)
+        .bind(&input_player.id)
+        .fetch_optional(&mut *tx)
         .await?;
+
+        if let Some(player) = player {
+            // add player to match
+            sqlx::query(
+                r#"
+                INSERT INTO participant (match_id, player_id, team, no_contest)
+                VALUES ($1, $2, $3, FALSE)
+                "#,
+            )
+            .bind(match_id)
+            .bind(player.id)
+            .bind(u8::from(input_player.team))
+            .execute(&mut *tx)
+            .await?;
+
+            // insert players to vec
+            participants.push(Participant {
+                player: Player {
+                    id: player.short_id,
+                    public_key: player.public_key,
+                    display_name: player.display_name,
+                },
+                team: input_player.team,
+                finish_time: None,
+                no_contest: false,
+            })
+        } else {
+            tx.rollback().await?;
+            return Err(AppError::not_found(format!(
+                "Participant w/ ID {} not found",
+                input_player.id
+            )));
+        }
     }
 
     tx.commit().await?;
@@ -76,7 +115,7 @@ pub async fn create(
     let battle = Battle {
         id: uuid,
         level_name: request.level_name,
-        participants: request.participants,
+        participants,
         accepting_bets: true,
         victor: None,
         closed_at: Some(closed_at),
@@ -91,7 +130,7 @@ pub async fn create(
 /// Updates the placement of a player for a given match.
 #[instrument(skip(state))]
 pub async fn update_placement(
-    Path((uuid, rrid)): Path<(Uuid, Rrid)>,
+    Path((uuid, short_id)): Path<(Uuid, String)>,
     State(state): State<AppState>,
     Payload(request): Payload<UpdatePlayerPlacementRequest>,
 ) -> Result<AppJson<Participant>, AppError> {
@@ -124,29 +163,34 @@ pub async fn update_placement(
 
     #[derive(FromRow)]
     struct ParticipantQuery {
+        id: Option<i32>,
         team: Option<u8>,
         no_contest: Option<bool>,
         display_name: String,
+        #[sqlx(try_from = "String")]
+        public_key: Rrid,
     }
 
     // find the battle participant
     let participant = sqlx::query_as::<_, ParticipantQuery>(
         r#"
         SELECT
+            pt.id,
             pt.no_contest,
             pt.team,
-            p.display_name
+            p.display_name,
+            p.public_key
         FROM
             player p
         LEFT OUTER JOIN
             participant pt
             ON pt.player_id = p.id
         WHERE
-            p.public_key = $1
+            p.short_id = $1
             AND pt.match_id = $2
         "#,
     )
-    .bind(rrid.as_str())
+    .bind(&short_id)
     .bind(battle.id)
     .fetch_optional(&state.db)
     .await?;
@@ -154,12 +198,14 @@ pub async fn update_placement(
     let Some(participant) = participant else {
         // The player with that RRID does not exist.
         return Err(AppError::not_found(format!(
-            "Player w/ RRID {} does not exist.",
-            rrid
+            "Player w/ id {} does not exist.",
+            short_id
         )));
     };
 
-    let Some((team, no_contest)) = participant.team.zip(participant.no_contest) else {
+    let (Some(participant_id), Some(team), Some(no_contest)) =
+        (participant.id, participant.team, participant.no_contest)
+    else {
         // the player is not participating!
         return Err(AppError::not_found(format!(
             "Player {} not participating in match.",
@@ -171,19 +217,19 @@ pub async fn update_placement(
     sqlx::query(
         r#"
         UPDATE participant
-        SET finish_time = $1
-        WHERE player_id = $2 AND match_id = $3
+        SET finish_time = $2
+        WHERE id = $1
         "#,
     )
+    .bind(participant_id)
     .bind(request.finish_time)
-    .bind(rrid.as_str())
-    .bind(uuid.hyphenated().to_string())
     .execute(&state.db)
     .await?;
 
     Ok(AppJson(Participant {
         player: Player {
-            id: rrid,
+            id: short_id,
+            public_key: participant.public_key,
             display_name: participant.display_name,
         },
         team: PlayerTeam::try_from(team).map_err(AppError::new)?,
