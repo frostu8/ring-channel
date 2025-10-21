@@ -230,8 +230,9 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Match"
-              example:
-                $ref: "#/components/examples/matchExample"
+              examples:
+                matchExample:
+                  $ref: "#/components/examples/matchExample"
         "400":
           description: >
             A participant was added to the match that does not exist.
@@ -355,8 +356,9 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Participant"
-              example:
-                $ref: "#/components/examples/participantExample"
+              examples:
+                participantExample:
+                  $ref: "#/components/examples/participantExample"
         "400":
           description: >
             Attempted to modify an already concluded match.
@@ -404,6 +406,7 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Player"
-              example:
-                $ref: "#/components/examples/playerExample"
+              examples:
+                playerExample:
+                  $ref: "#/components/examples/playerExample"
               
