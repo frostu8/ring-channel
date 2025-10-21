@@ -1,3 +1,3 @@
 #!/bin/bash
 
-npx @redocly/cil build-docs openapi/openapi.yaml
+npx @redocly/cli build-docs openapi/openapi.yaml
