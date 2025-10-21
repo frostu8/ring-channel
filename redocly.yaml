@@ -1,5 +1,10 @@
 extends:
   - recommended
+apis:
+  core@v1:
+    root: ./openapi/openapi.yaml
+    rules:
+      no-ambiguous-paths: error
 openapi:
   downloadUrls:
     - title: Download
