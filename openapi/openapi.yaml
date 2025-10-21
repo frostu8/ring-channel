@@ -9,6 +9,12 @@ servers:
   - url: https://duelchannel.ringrace.rs/api/v1
     description: The main API server.
 
+tags:
+  - name: match
+    description: Match-related operations.
+  - name: player
+    description: Endpoints that operate only on players.
+
 components:
   schemas:
     Player:
@@ -20,7 +26,7 @@ components:
         id:
           type: string
           description: The player's "short ID."
-          pattern: '^[A-Z]{6}$'
+          pattern: '^[\dA-Z]{6}$'
         display_name:
           type: string
           description: The most-recent display name of the player.
@@ -115,7 +121,7 @@ components:
               id:
                 type: string
                 description: A player's "short ID."
-                pattern: '^[A-Z]{6}$'
+                pattern: '^[\dA-Z]{6}$'
               team:
                 type: integer
                 description: The team number of the player.
@@ -160,35 +166,38 @@ components:
           description: A description of the error.
   examples:
     matchExample:
-      id: 18e0b086-5557-4245-877d-19729bf6d4bd
-      level_name: Robotnik Coaster
-      participants:
-        - id: GJBIJK
-          display_name: Dr. Robotnik
-          team: 0
-          no_contest: false
-        - id: 4ZWBU0
-          display_name: Tails
-          team: 1
-          no_contest: false
-      status: 0
-      accepting_bets: true
-      closes_at: 2025-10-21T04:45:32.287657947Z
+      value:
+        id: 18e0b086-5557-4245-877d-19729bf6d4bd
+        level_name: Robotnik Coaster
+        participants:
+          - id: GJBIJK
+            display_name: Dr. Robotnik
+            team: 0
+            no_contest: false
+          - id: 4ZWBU0
+            display_name: Tails
+            team: 1
+            no_contest: false
+        status: 0
+        accepting_bets: true
+        closes_at: 2025-10-21T04:45:32.287657947Z
     participantExample:
-      id: GJBIJK
-      display_name: Dr. Robotnik
-      team: 0
-      finish_time: 36149
-      no_contest: false
+      value:
+        id: GJBIJK
+        display_name: Dr. Robotnik
+        team: 0
+        finish_time: 36149
+        no_contest: false
     playerExample:
-      id: 4ZWBU0
-      display_name: Tails
+      value:
+        id: 4ZWBU0
+        display_name: Tails
 
 paths:
   /matches:
     post:
       tags:
-        - Matches
+        - match
       summary: Create Match
       description: >
         Given the specifications of the match, starts a new match, notifying
@@ -196,6 +205,7 @@ paths:
 
         A match's bet end time will be determined as soon as it's created.
         Bets will begin to march even during this response!
+      operationId: create_match
       requestBody:
         description: The match setup details.
         content:
@@ -232,11 +242,12 @@ paths:
   /matches/{match_id}:
     patch:
       tags:
-        - Matches
+        - match
       summary: Modify Match
       description: >
         **This endpoint cannot modify concluded matches.** When matches are
         concluded through this endpoint, they are locked.
+      operation_id: modify_match
       parameters:
         - name: match_id
           in: path
@@ -299,7 +310,7 @@ paths:
   /matches/{match_id}/players/{player_id}:
     patch:
       tags:
-        - Matches
+        - match
       summary: Modify Player Placement
       description: >
         This endpoint should be invoked when players exit levels; i.e. they
@@ -308,6 +319,7 @@ paths:
         If the match is concluded, you will be unable to update a player's
         placements. The only way to set a `no_contest` value is by concluding
         the match without updating the player's placement.
+      operationId: modify_player_placement
       parameters:
         - name: match_id
           in: path
@@ -324,7 +336,7 @@ paths:
           schema:
             type: string
             example: GJBIJK
-            pattern: '^[A-Z]{6}$'
+            pattern: '^[\dA-Z]{6}$'
       requestBody:
         description: The new player's placement information.
         content:
@@ -366,11 +378,12 @@ paths:
   /players:
     post:
       tags:
-        - Players
+        - player
       summary: Register Player
       description: >
         This endpoint is idempotent; given the same public key, it will always
         return the same id for the player.
+      operationId: register_player
       requestBody:
         description: The details of the player to register.
         required: true
