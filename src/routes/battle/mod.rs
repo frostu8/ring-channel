@@ -117,7 +117,7 @@ pub async fn create(
         participants,
         accepting_bets: true,
         victor: None,
-        closed_at: Some(closed_at),
+        closes_at: Some(closed_at),
     };
 
     // Send the notice of the new battle to all connected clients
