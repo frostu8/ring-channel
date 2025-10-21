@@ -60,7 +60,7 @@ components:
           required:
             - team
             - no_contest
-          propeties:
+          properties:
             team:
               type: integer
               description: The team number the player is on.
