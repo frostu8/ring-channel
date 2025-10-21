@@ -14,14 +14,15 @@ use serde::{
 pub struct Player {
     /// The 6-digit short id for the player.
     pub id: String,
+    /// The last display name used by the player.
+    pub display_name: String,
     /// The public rrid of the player.
     ///
     /// The base16 encoded public key of the player, which is a 64-character
     /// string. Encoded in full; while this does uniquely identify the player,
     /// the server will generate a short code for them.
-    pub public_key: Rrid,
-    /// The last display name used by the player.
-    pub display_name: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub public_key: Option<Rrid>,
 }
 
 /// A character a player has selected.

@@ -56,8 +56,6 @@ pub async fn update(
         team: Option<u8>,
         no_contest: Option<bool>,
         display_name: String,
-        #[sqlx(try_from = "String")]
-        public_key: Rrid,
     }
 
     // find the battle participant
@@ -67,8 +65,7 @@ pub async fn update(
             pt.id,
             pt.no_contest,
             pt.team,
-            p.display_name,
-            p.public_key
+            p.display_name
         FROM
             player p
         LEFT OUTER JOIN
@@ -118,7 +115,7 @@ pub async fn update(
     Ok(AppJson(Participant {
         player: Player {
             id: short_id,
-            public_key: participant.public_key,
+            public_key: None,
             display_name: participant.display_name,
         },
         team: PlayerTeam::try_from(team).map_err(AppError::new)?,

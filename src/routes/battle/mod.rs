@@ -8,7 +8,7 @@ use axum::extract::State;
 use chrono::{TimeDelta, Utc};
 
 use ring_channel_model::{
-    Player, Rrid,
+    Player,
     battle::{Battle, Participant},
     message::server::NewBattle,
     request::battle::CreateBattleRequest,
@@ -35,8 +35,6 @@ pub async fn create(
         id: i32,
         short_id: String,
         display_name: String,
-        #[sqlx(try_from = "String")]
-        public_key: Rrid,
     }
 
     let mut tx = state.db.begin().await?;
@@ -67,7 +65,7 @@ pub async fn create(
         // find player
         let player = sqlx::query_as::<_, PlayerQuery>(
             r#"
-            SELECT id, short_id, display_name, public_key
+            SELECT id, short_id, display_name
             FROM player
             WHERE short_id = $1
             "#,
@@ -94,7 +92,7 @@ pub async fn create(
             participants.push(Participant {
                 player: Player {
                     id: player.short_id,
-                    public_key: player.public_key,
+                    public_key: None,
                     display_name: player.display_name,
                 },
                 team: input_player.team,

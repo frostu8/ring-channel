@@ -8,7 +8,7 @@ use http::StatusCode;
 
 use rand::{Rng, distr::Alphanumeric};
 
-use ring_channel_model::{Player, Rrid, request::player::RegisterPlayerRequest};
+use ring_channel_model::{Player, request::player::RegisterPlayerRequest};
 
 use sqlx::FromRow;
 
@@ -35,9 +35,6 @@ pub async fn register(
         pub short_id: String,
         /// The display_name of the player.
         pub display_name: String,
-        /// The public key of the player.
-        #[sqlx(try_from = "String")]
-        pub public_key: Rrid,
     }
 
     let mut tx = state.db.begin().await?;
@@ -47,7 +44,7 @@ pub async fn register(
     // find existing player
     let player_query = sqlx::query_as::<_, UpsertQuery>(
         r#"
-        SELECT short_id, display_name, public_key
+        SELECT short_id, display_name
         FROM player
         WHERE public_key = $1
         "#,
@@ -80,8 +77,8 @@ pub async fn register(
             StatusCode::CREATED,
             AppJson(Player {
                 id: player.short_id,
-                public_key: player.public_key,
                 display_name: player.display_name,
+                public_key: None,
             }),
         ))
     } else {
@@ -102,7 +99,7 @@ pub async fn register(
                 r#"
                 INSERT INTO player (short_id, public_key, display_name, inserted_at, updated_at)
                 VALUES ($1, $2, $3, $4, $4)
-                RETURNING id, short_id, display_name, public_key
+                RETURNING short_id, display_name
                 "#,
             )
             .bind(&short_id)
@@ -139,8 +136,8 @@ pub async fn register(
                 StatusCode::CREATED,
                 AppJson(Player {
                     id: player.short_id,
-                    public_key: player.public_key,
                     display_name: player.display_name,
+                    public_key: None,
                 }),
             ))
         } else {
