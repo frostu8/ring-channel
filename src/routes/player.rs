@@ -120,13 +120,14 @@ pub async fn register(
                 Err(err) => {
                     if let Some(db_err) = err.as_database_error() {
                         // if this is a unique violation, simply try again
-                        if db_err.kind() == sqlx::error::ErrorKind::UniqueViolation {
+                        if db_err.is_unique_violation() {
                             tracing::debug!("unique key {} failed, regenerating", short_id);
                         } else {
                             return Err(err.into());
                         }
+                    } else {
+                        return Err(err.into());
                     }
-                    return Err(err.into());
                 }
             }
         }
