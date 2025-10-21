@@ -8,7 +8,7 @@ use axum::{
     extract::{MatchedPath, Request},
     middleware::{Next, from_fn},
     response::Response,
-    routing::{get, patch, post, put},
+    routing::{get, patch, post},
 };
 
 use axum_server::Handle;
@@ -80,7 +80,7 @@ async fn main() -> Result<(), Error> {
                     Router::<AppState>::new()
                         .route(
                             "/placements/{short_id}",
-                            patch(routes::battle::update_placement),
+                            patch(routes::battle::placement::update),
                         )
                         .route("/wagers", post(routes::battle::wager::create)),
                 ),

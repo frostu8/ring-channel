@@ -26,6 +26,7 @@ use crate::app::{AppError, error::AppErrorKind};
 /// These are not for credentials!
 #[derive(Clone, Deref)]
 pub struct Session {
+    #[allow(dead_code)]
     session: TowerSession,
     #[deref]
     data: SessionData,
