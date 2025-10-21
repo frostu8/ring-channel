@@ -2,7 +2,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::battle::PlayerTeam;
+use crate::battle::{BattleStatus, PlayerTeam};
 
 /// Request to create a match.
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -33,5 +33,29 @@ pub struct CreateBattleParticipant {
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct UpdatePlayerPlacementRequest {
     /// The finishing time of the player.
-    pub finish_time: i32,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub finish_time: Option<i32>,
+}
+
+/// Request to update a match.
+///
+/// Concluded matches cannot be updated.
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct UpdateBattleRequest {
+    /// Match status.
+    ///
+    /// If this flag is set to [`BattleStatus::Concluded`] or
+    /// [`BattleStatus::Cancelled`], the match ends, and processing is done for
+    /// it. All players without finish times have their NO CONTEST values set
+    /// to `true` if it hasn't been done already.
+    ///
+    /// If the match was not cancelled, the match is then evaluated, and pots
+    /// are divvied up.
+    ///
+    /// If the match's current status is [`BattleStatus::Ongoing`], and this
+    /// request sets it to `BattleStatus::Ongoing`, nothing happens.
+    ///
+    /// **This action is irreversible.** Be careful!
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub status: Option<BattleStatus>,
 }

@@ -14,20 +14,18 @@ use crate::{player::Player, user::User};
 /// A single match.
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Battle {
-    /// The unique identifier of the battle.
+    /// The unique identifier of the match.
     pub id: String,
-    /// The level name the battle played on.
+    /// The level name the match played on.
     pub level_name: String,
     /// The participants.
     pub participants: Vec<Participant>,
-    /// Whether the battle is accepting bets or not.
+    /// The status of the match.
+    pub status: BattleStatus,
+    /// Whether the match is accepting bets or not.
     pub accepting_bets: bool,
-    /// The victor of the battle.
-    ///
-    /// May be `None` if the battle hasn't concluded.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub victor: Option<PlayerTeam>,
     /// When wagers close at. Get them in!
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub closes_at: Option<DateTime<Utc>>,
 }
 
@@ -46,6 +44,31 @@ pub struct Participant {
     /// If the player no contest'd.
     #[serde(default)]
     pub no_contest: bool,
+}
+
+/// The match's status.
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    Deserialize_repr,
+    Serialize_repr,
+    PartialEq,
+    Eq,
+    Hash,
+    TryFromPrimitive,
+    IntoPrimitive,
+)]
+#[repr(u8)]
+pub enum BattleStatus {
+    /// The match is ongoing. No victors have been determined.
+    Ongoing = 0,
+    /// The match concluded normally.
+    Concluded = 1,
+    /// The match was cancelled.
+    ///
+    /// Wagers were refunded, and the pot was cancelled.
+    Cancelled = 2,
 }
 
 /// A team side.

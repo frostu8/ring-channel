@@ -3,7 +3,7 @@
 use axum::extract::{Path, State};
 
 use ring_channel_model::{
-    Player, Rrid,
+    Player,
     battle::{Participant, PlayerTeam},
     request::battle::UpdatePlayerPlacementRequest,
 };
@@ -29,6 +29,15 @@ pub async fn update(
         concluded: bool,
     }
 
+    #[derive(FromRow)]
+    struct ParticipantQuery {
+        id: Option<i32>,
+        team: Option<u8>,
+        no_contest: Option<bool>,
+        finish_time: Option<i32>,
+        display_name: String,
+    }
+
     // find match first
     let battle = sqlx::query_as::<_, BattleQuery>(
         r#"
@@ -50,14 +59,6 @@ pub async fn update(
         return Err(AppErrorKind::AlreadyConcluded(uuid).into());
     }
 
-    #[derive(FromRow)]
-    struct ParticipantQuery {
-        id: Option<i32>,
-        team: Option<u8>,
-        no_contest: Option<bool>,
-        display_name: String,
-    }
-
     // find the battle participant
     let participant = sqlx::query_as::<_, ParticipantQuery>(
         r#"
@@ -65,6 +66,7 @@ pub async fn update(
             pt.id,
             pt.no_contest,
             pt.team,
+            pt.finish_time,
             p.display_name
         FROM
             player p
@@ -89,6 +91,7 @@ pub async fn update(
         )));
     };
 
+    // Get non-nullables
     let (Some(participant_id), Some(team), Some(no_contest)) =
         (participant.id, participant.team, participant.no_contest)
     else {
@@ -99,12 +102,19 @@ pub async fn update(
         )));
     };
 
+    // Get other fields
+    let ParticipantQuery { finish_time, .. } = participant;
+
     // UPDATE THAT SHIT KAKAROT!
     sqlx::query(
         r#"
-        UPDATE participant
-        SET finish_time = $2
-        WHERE id = $1
+        UPDATE
+            participant
+        SET
+            finish_time = IFNULL($2, finish_time)
+        WHERE
+            id = $1
+        RETURNING
         "#,
     )
     .bind(participant_id)
@@ -119,7 +129,7 @@ pub async fn update(
             display_name: participant.display_name,
         },
         team: PlayerTeam::try_from(team).map_err(AppError::new)?,
-        finish_time: Some(request.finish_time),
+        finish_time: finish_time.or(request.finish_time),
         no_contest,
     }))
 }

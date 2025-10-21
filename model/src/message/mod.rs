@@ -4,7 +4,7 @@ use derive_more::From;
 
 use serde::{Deserialize, Serialize};
 
-use crate::message::server::NewBattle;
+use crate::message::server::{BattleConcluded, NewBattle};
 
 pub mod server;
 
@@ -14,6 +14,8 @@ pub mod server;
 #[derive(Clone, Debug, Deserialize, Serialize, From)]
 #[serde(tag = "op", content = "d", rename_all = "kebab-case")]
 pub enum Message {
-    /// A server notification for a new battle.
+    /// A server notification for a new match.
     NewBattle(NewBattle),
+    /// A server notification for a concluded match.
+    BattleConcluded(BattleConcluded),
 }

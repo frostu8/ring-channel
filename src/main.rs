@@ -78,6 +78,7 @@ async fn main() -> Result<(), Error> {
                 .nest(
                     "/{battle_id}",
                     Router::<AppState>::new()
+                        .route("/", patch(routes::battle::update))
                         .route(
                             "/placements/{short_id}",
                             patch(routes::battle::placement::update),

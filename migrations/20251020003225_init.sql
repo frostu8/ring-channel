@@ -33,9 +33,10 @@ CREATE TABLE battle (
     id INTEGER PRIMARY KEY,
     uuid CHAR(36) NOT NULL UNIQUE,
     level_name VARCHAR(255) NOT NULL,
-    -- If the match is completed
-    concluded BOOLEAN NOT NULL DEFAULT FALSE,
+    -- Match status.
+    status INTEGER NOT NULL DEFAULT 0,
     -- May be NULL if the match isn't over.
+    -- The timestamp when the match was concluded or cancelled
     concluded_at TIMESTAMP,
     -- The time of wagers closing for this match
     closed_at TIMESTAMP NOT NULL,
