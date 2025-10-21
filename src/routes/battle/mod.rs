@@ -186,7 +186,7 @@ pub async fn update(
             SET
                 no_contest = TRUE
             WHERE
-                finish_time IS NOT NULL
+                finish_time IS NULL
                 AND match_id = $1
             "#,
         )

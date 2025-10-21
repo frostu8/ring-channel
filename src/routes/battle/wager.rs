@@ -2,12 +2,9 @@
 
 use ring_channel_model::battle::BattleWager;
 
-use crate::{
-    app::{AppError, AppJson},
-    auth::AuthenticatedUser,
-};
+use crate::app::{AppError, AppJson};
 
 /// Creates a personal wager.
-pub async fn create(user: AuthenticatedUser) -> Result<AppJson<BattleWager>, AppError> {
+pub async fn create() -> Result<AppJson<BattleWager>, AppError> {
     todo!()
 }

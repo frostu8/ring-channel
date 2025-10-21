@@ -64,6 +64,7 @@ pub struct Handle {
     pub rx: Receiver<ApiMessage>,
 }
 
+#[allow(dead_code)]
 struct WebSocketState {
     ws: WebSocket,
     handle: Handle,

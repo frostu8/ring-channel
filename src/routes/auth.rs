@@ -91,7 +91,7 @@ pub async fn token(
         .ok_or(UpdateTokenError::MissingRefreshToken)
         .map_err(AppError::new)?
         .into_secret();
-    let expires_in = token_result
+    let _expires_in = token_result
         .expires_in()
         .ok_or(UpdateTokenError::MissingExpiresIn)
         .map(|duration| now + duration)

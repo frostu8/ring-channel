@@ -42,7 +42,7 @@ pub async fn update(
     // find match first
     let battle = sqlx::query_as::<_, BattleQuery>(
         r#"
-        SELECT id, concluded
+        SELECT id, status
         FROM battle
         WHERE uuid = $1
         "#,
@@ -115,7 +115,6 @@ pub async fn update(
             finish_time = IFNULL($2, finish_time)
         WHERE
             id = $1
-        RETURNING
         "#,
     )
     .bind(participant_id)

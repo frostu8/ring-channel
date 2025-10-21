@@ -5,7 +5,7 @@ use axum::{
     response::Response,
 };
 
-use crate::{app::AppState, auth::AuthenticatedUser};
+use crate::app::AppState;
 
 /// Establishes a connection to the websocket gateway.
 pub async fn handler(
