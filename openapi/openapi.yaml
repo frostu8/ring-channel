@@ -63,7 +63,7 @@ components:
           items:
             $ref: "#/components/schemas/Participant"
         status:
-          $ref: "#/components/schemas/Match"
+          $ref: "#/components/schemas/MatchStatus"
         accepting_bets:
           type: boolean
         closes_at:
