@@ -40,6 +40,12 @@ pub struct Participant {
     pub player: Player,
     /// The team they are on.
     pub team: PlayerTeam,
+    /// The player's finish time, if they finished.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub finish_time: Option<i32>,
+    /// If the player no contest'd.
+    #[serde(default)]
+    pub no_contest: bool,
 }
 
 /// A team side.

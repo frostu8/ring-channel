@@ -8,7 +8,7 @@ use axum::{
     extract::{MatchedPath, Request},
     middleware::{Next, from_fn},
     response::Response,
-    routing::{get, patch, post},
+    routing::{get, patch, post, put},
 };
 
 use axum_server::Handle;
@@ -69,7 +69,7 @@ async fn main() -> Result<(), Error> {
         .route("/ws", get(routes::ws::handler))
         .nest(
             "/players/{rrid}",
-            Router::<AppState>::new().route("/", patch(routes::player::register)),
+            Router::<AppState>::new().route("/", put(routes::player::register)),
         )
         .nest(
             "/matches",
@@ -77,7 +77,12 @@ async fn main() -> Result<(), Error> {
                 .route("/", post(routes::battle::create))
                 .nest(
                     "/{battle_id}",
-                    Router::<AppState>::new().route("/wagers", post(routes::battle::wager::create)),
+                    Router::<AppState>::new()
+                        .route(
+                            "/placements/{rrid}",
+                            patch(routes::battle::update_placement),
+                        )
+                        .route("/wagers", post(routes::battle::wager::create)),
                 ),
         )
         .with_state(state);

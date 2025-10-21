@@ -2,7 +2,7 @@
 
 use axum::extract::{Path, State};
 
-use ring_channel_model::{Player, Rrid, request::player::RegisterPlayer};
+use ring_channel_model::{Player, Rrid, request::player::RegisterPlayerRequest};
 
 use tracing::instrument;
 
@@ -19,7 +19,7 @@ use crate::app::{AppError, AppJson, AppState, Payload};
 pub async fn register(
     Path((rrid,)): Path<(Rrid,)>,
     State(state): State<AppState>,
-    Payload(request): Payload<RegisterPlayer>,
+    Payload(request): Payload<RegisterPlayerRequest>,
 ) -> Result<AppJson<Player>, AppError> {
     let mut tx = state.db.begin().await?;
 

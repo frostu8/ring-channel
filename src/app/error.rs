@@ -18,6 +18,7 @@ use derive_more::{Display, From};
 use http::StatusCode;
 
 use ring_channel_model::ApiError;
+use uuid::Uuid;
 
 use crate::app::AppJson;
 
@@ -38,6 +39,22 @@ impl AppError {
         AppError {
             kind: AppErrorKind::Other(Box::new(e)),
             message: None,
+        }
+    }
+
+    /// Constructs a new not found error.
+    pub fn not_found(message: impl Into<String>) -> AppError {
+        AppError {
+            kind: AppErrorKind::NotFound,
+            message: Some(message.into()),
+        }
+    }
+
+    /// Adds a custom message to the error.
+    pub fn with_message(self, message: impl Into<String>) -> AppError {
+        AppError {
+            message: Some(message.into()),
+            ..self
         }
     }
 
@@ -72,6 +89,18 @@ impl AppError {
 
     fn to_status_and_api_error(self) -> (StatusCode, ApiError) {
         let (status, mut error) = match self.kind {
+            AppErrorKind::NotFound => (
+                StatusCode::NOT_FOUND,
+                ApiError {
+                    message: "Resource not found".into(),
+                },
+            ),
+            error_kind @ AppErrorKind::AlreadyConcluded(_) => (
+                StatusCode::BAD_REQUEST,
+                ApiError {
+                    message: error_kind.to_string(),
+                },
+            ),
             AppErrorKind::Json(error) => (
                 StatusCode::BAD_REQUEST,
                 ApiError {
@@ -93,19 +122,19 @@ impl AppError {
             AppErrorKind::UnsupportedContentType(mime) => (
                 StatusCode::BAD_REQUEST,
                 ApiError {
-                    message: format!("Unrecognized MIME type: {}.", mime),
+                    message: format!("Unrecognized MIME type: {}", mime),
                 },
             ),
             AppErrorKind::MissingContentType => (
                 StatusCode::BAD_REQUEST,
                 ApiError {
-                    message: "Missing request content type.".into(),
+                    message: "Missing request content type".into(),
                 },
             ),
             AppErrorKind::InvalidState { .. } => (
                 StatusCode::BAD_REQUEST,
                 ApiError {
-                    message: "Invalid state sent.".into(),
+                    message: "Invalid state sent".into(),
                 },
             ),
             AppErrorKind::SessionFetch((code, message)) => (
@@ -119,7 +148,7 @@ impl AppError {
             _error_kind => (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 ApiError {
-                    message: "An internal server error occured.".into(),
+                    message: "An internal server error occured".into(),
                 },
             ),
         };
@@ -182,6 +211,13 @@ pub enum AppErrorKind {
     /// The request's urlencoded payload was malformed or invalid.
     #[display("{_0}")]
     Form(FormRejection),
+    /// A resource was not found.
+    #[display("Resource not found")]
+    NotFound,
+    /// A battle with the given UUID already concluded.
+    #[display("Battle {_0} concluded")]
+    #[from(ignore)]
+    AlreadyConcluded(Uuid),
     /// A content type was not provided.
     MissingContentType,
     /// The server cannot serve this content type.
