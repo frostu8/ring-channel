@@ -1,6 +1,6 @@
 use std::{net::SocketAddr, sync::Arc};
 
-use http::Method;
+use http::{Method, header};
 
 // :(
 use time::Duration;
@@ -9,7 +9,7 @@ use axum::{
     Router,
     extract::{MatchedPath, Request},
     middleware::{Next, from_fn},
-    response::Response,
+    response::{IntoResponse, Response},
     routing::{get, patch, post},
 };
 
@@ -165,8 +165,14 @@ async fn main() -> Result<(), Error> {
     Ok(())
 }
 
-async fn serve_openapi() -> &'static str {
-    OPENAPI_FILE
+async fn serve_openapi() -> impl IntoResponse {
+    (
+        [(
+            header::CONTENT_DISPOSITION,
+            "attachment; filename=\"openapi.yaml\"",
+        )],
+        OPENAPI_FILE,
+    )
 }
 
 // Stolen from: https://github.com/tokio-rs/axum/blob/main/examples/error-handling/src/main.rs

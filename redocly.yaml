@@ -1,0 +1,4 @@
+openapi:
+  downloadUrls:
+    - title: Download
+      url: 'https://duelchannel.ringrace.rs/api/v1/openapi.yaml'
