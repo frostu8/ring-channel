@@ -247,7 +247,7 @@ paths:
       description: >
         **This endpoint cannot modify concluded matches.** When matches are
         concluded through this endpoint, they are locked.
-      operation_id: modify_match
+      operationId: modify_match
       parameters:
         - name: match_id
           in: path
