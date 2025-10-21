@@ -1,5 +1,7 @@
 use std::{net::SocketAddr, sync::Arc};
 
+use http::Method;
+
 // :(
 use time::Duration;
 
@@ -26,10 +28,16 @@ use sqlx::pool::PoolOptions;
 
 use tokio::{main, select, signal};
 
-use tower_http::trace::TraceLayer;
+use tower_http::{
+    cors::{Any, CorsLayer},
+    trace::TraceLayer,
+};
 
 use tower_sessions::{Expiry, SessionManagerLayer, cookie::SameSite};
 use tower_sessions_moka_store::MokaStore;
+
+const OPENAPI_FILE: &str =
+    include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/openapi/openapi.yaml"));
 
 #[main]
 async fn main() -> Result<(), Error> {
@@ -81,6 +89,16 @@ async fn main() -> Result<(), Error> {
                         .route("/", patch(routes::battle::update))
                         .route("/players/{short_id}", patch(routes::battle::player::update))
                         .route("/wagers", post(routes::battle::wager::create)),
+                ),
+        )
+        // serve openapi spec
+        .merge(
+            Router::<AppState>::new()
+                .route("/openapi.yaml", get(serve_openapi))
+                .layer(
+                    CorsLayer::new()
+                        .allow_methods([Method::GET])
+                        .allow_origin(Any),
                 ),
         )
         .with_state(state);
@@ -145,6 +163,10 @@ async fn main() -> Result<(), Error> {
     db.close().await;
 
     Ok(())
+}
+
+async fn serve_openapi() -> &'static str {
+    OPENAPI_FILE
 }
 
 // Stolen from: https://github.com/tokio-rs/axum/blob/main/examples/error-handling/src/main.rs
