@@ -102,6 +102,12 @@ impl AppError {
                     message: error_kind.to_string(),
                 },
             ),
+            error_kind @ AppErrorKind::MissingParticipant(_) => (
+                StatusCode::BAD_REQUEST,
+                ApiError {
+                    message: error_kind.to_string(),
+                },
+            ),
             AppErrorKind::Json(error) => (
                 StatusCode::BAD_REQUEST,
                 ApiError {
@@ -219,6 +225,9 @@ pub enum AppErrorKind {
     #[display("Battle {_0} concluded")]
     #[from(ignore)]
     AlreadyConcluded(Uuid),
+    /// A battle was attempted to be started with a bad participant.
+    #[display("Participant {_0} not found")]
+    MissingParticipant(String),
     /// A content type was not provided.
     MissingContentType,
     /// The server cannot serve this content type.

@@ -4,7 +4,7 @@ use axum::extract::{Path, State};
 
 use ring_channel_model::{
     Player,
-    battle::{Participant, PlayerTeam},
+    battle::{BattleStatus, Participant, PlayerTeam},
     request::battle::UpdatePlayerPlacementRequest,
 };
 
@@ -26,7 +26,8 @@ pub async fn update(
     #[derive(FromRow)]
     struct BattleQuery {
         id: i32,
-        concluded: bool,
+        #[sqlx(try_from = "u8")]
+        status: BattleStatus,
     }
 
     #[derive(FromRow)]
@@ -51,11 +52,11 @@ pub async fn update(
     .await?;
 
     let Some(battle) = battle else {
-        return Err(AppError::not_found(format!("Match {} not found.", uuid)));
+        return Err(AppError::not_found(format!("Match {} not found", uuid)));
     };
 
     // if the battle is closed, it cannot be updated anymore
-    if battle.concluded {
+    if battle.status != BattleStatus::Ongoing {
         return Err(AppErrorKind::AlreadyConcluded(uuid).into());
     }
 
@@ -86,7 +87,7 @@ pub async fn update(
     let Some(participant) = participant else {
         // The player with that RRID does not exist.
         return Err(AppError::not_found(format!(
-            "Player w/ id {} does not exist.",
+            "Player w/ id {} does not exist",
             short_id
         )));
     };
@@ -97,7 +98,7 @@ pub async fn update(
     else {
         // the player is not participating!
         return Err(AppError::not_found(format!(
-            "Player {} not participating in match.",
+            "Player {} not participating in match",
             participant.display_name
         )));
     };

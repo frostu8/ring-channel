@@ -79,10 +79,7 @@ async fn main() -> Result<(), Error> {
                     "/{battle_id}",
                     Router::<AppState>::new()
                         .route("/", patch(routes::battle::update))
-                        .route(
-                            "/placements/{short_id}",
-                            patch(routes::battle::placement::update),
-                        )
+                        .route("/players/{short_id}", patch(routes::battle::player::update))
                         .route("/wagers", post(routes::battle::wager::create)),
                 ),
         )

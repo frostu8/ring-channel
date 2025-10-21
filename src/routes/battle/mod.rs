@@ -1,6 +1,6 @@
 //! Match management routes.
 
-pub mod placement;
+pub mod player;
 pub mod wager;
 
 use axum::extract::{Path, State};
@@ -103,10 +103,7 @@ pub async fn create(
             })
         } else {
             tx.rollback().await?;
-            return Err(AppError::not_found(format!(
-                "Participant w/ ID {} not found",
-                input_player.id
-            )));
+            return Err(AppErrorKind::MissingParticipant(input_player.id.clone()).into());
         }
     }
 
@@ -168,7 +165,7 @@ pub async fn update(
 
     // Verify changes
     let is_status_changed = request.status.map(|s| s != battle.status).unwrap_or(false);
-    if battle.status != BattleStatus::Ongoing && is_status_changed {
+    if battle.status != BattleStatus::Ongoing {
         return Err(AppErrorKind::AlreadyConcluded(uuid).into());
     }
 

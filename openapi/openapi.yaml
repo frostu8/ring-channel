@@ -1,24 +1,264 @@
 openapi: 3.0.4
 info:
   title: Duel Channel API
-  description: Access API for the Duel Channel Ring Racers server. Salt at the
-    next level!
+  description: Access API for the Duel Channel Ring Racers server. Get your
+    Mobiums up!
   version: 0.1.0
 
 servers:
   - url: https://duelchannel.ringrace.rs/api/v1
     description: The main API server.
 
+components:
+  schemas:
+    Player:
+      type: object
+      required:
+        - id
+        - display_name
+      properties:
+        id:
+          type: string
+        display_name:
+          type: string
+    CreatePlayer:
+      type: object
+      required:
+        - display_name
+        - public_key
+      properties:
+        display_name:
+          type: string
+        public_key:
+          type: string
+    Participant:
+      allOf:
+        - $ref: "#/components/schemas/Player"
+        - type: object
+          required:
+            - team
+            - no_contest
+          propeties:
+            team:
+              type: integer
+            finish_time:
+              type: integer
+            no_contest:
+              type: boolean
+    Match:
+      type: object
+      required:
+        - id
+        - level_name
+        - participants
+        - status
+        - accepting_bets
+      properties:
+        id:
+          type: string
+        level_name:
+          type: string
+        participants:
+          type: array
+          items:
+            $ref: "#/components/schemas/Participant"
+        status:
+          $ref: "#/components/schemas/Match"
+        accepting_bets:
+          type: boolean
+        closes_at:
+          type: string
+          format: date-time
+    UpdateMatch:
+      type: object
+      properties:
+        status:
+          $ref: "#/components/schemas/MatchStatus"
+    UpdatePlacement:
+      type: object
+      properties:
+        finish_time:
+          type: integer
+    MatchStatus:
+      description: >
+        The status of a match.
+        * `0` **Ongoing**  
+          The match is still running. **Note**, a match that is running may
+          not be accepting any more bets.
+        * `1` **Concluded**  
+          The match has ended, and the pots have been divvied up.
+        * `2` **Cancelled**  
+          The match ended abnormally. It may not have a victor, and wagers were
+          returned.
+      type: integer
+      enum: [0, 1, 2]
+    Error:
+      description: >
+        A generic API error.
+      type: object
+      required:
+        - message
+      properties:
+        message:
+          type: string
+
 paths:
   /matches:
     post:
-      summary: Creates a new match.
-      description: Given the specifications of the match, starts a new match,
-        notifying all clients currently connected.
+      tags:
+        - Matches
+      summary: Create Match
+      description: >
+        Given the specifications of the match, starts a new match, notifying
+        all clients currently connected.
+
+        A match's bet end time will be determined as soon as it's created.
+        Bets will begin to march even during this response!
       responses:
         "201":
-          description: The resulting battle.
+          description: The created match.
           content:
             application/json:
               schema:
-                
+                $ref: "#/components/schemas/Match"
+        "400":
+          description: >
+            A participant was added to the match that does not exist.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /matches/{match_id}:
+    patch:
+      tags:
+        - Matches
+      summary: Modify Match
+      description: >
+        **This endpoint cannot modify concluded matches.** When matches are
+        concluded through this endpoint, they are locked.
+      parameters:
+        - name: match_id
+          in: path
+          description: Match UUID
+          required: true
+          schema:
+            type: string
+      requestBody:
+        description: The properties to update about the match.
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateMatch"
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: "#/components/schemas/UpdateMatch"
+      responses:
+        "200":
+          description: The updated match.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Match"
+        "400":
+          description: >
+            Attempted to modify an already concluded match.
+
+            If the match has its `status` to **Concluded** or **Cancelled**, it
+            is protected from updates.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: >
+            Requested match does not exist.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /matches/{match_id}/players/{player_id}:
+    patch:
+      tags:
+        - Matches
+        - Players
+      summary: Modify Player Placement
+      description: >
+        This endpoint should be invoked when players exit levels; i.e. they
+        finish with a finish time.
+
+        If the match is concluded, you will be unable to update a player's
+        placements. The only way to set a `no_contest` value is by concluding
+        the match without updating the player's placement.
+      parameters:
+        - name: match_id
+          in: path
+          description: Match UUID
+          required: true
+          schema:
+            type: string
+        - name: player_id
+          in: path
+          description: Player ID
+          required: true
+          schema:
+            type: string
+      requestBody:
+        description: The new player's placement information.
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdatePlacement"
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: "#/components/schemas/UpdatePlacement"
+      responses:
+        "200":
+          description: The updated participant.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Participant"
+        "400":
+          description: >
+            Attempted to modify an already concluded match.
+
+            If the match has its `status` to **Concluded** or **Cancelled**, it
+            is protected from updates.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: >
+            The match does not exist, the player does not exist, or the player
+            is not participating in this match.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /players:
+    post:
+      tags:
+        - Players
+      summary: Register Player
+      description: >
+        This endpoint is idempotent; given the same public key, it will always
+        return the same id for the player.
+      requestBody:
+        description: The details of the player to register.
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreatePlayer"
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: "#/components/schemas/CreatePlayer"
+      responses:
+        "201":
+          description: The created player.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Player"
+              
