@@ -82,6 +82,7 @@ components:
     MatchStatus:
       description: >
         The status of a match.
+
         * `0` **Ongoing**  
           The match is still running. **Note**, a match that is running may
           not be accepting any more bets.
@@ -180,7 +181,6 @@ paths:
     patch:
       tags:
         - Matches
-        - Players
       summary: Modify Player Placement
       description: >
         This endpoint should be invoked when players exit levels; i.e. they
