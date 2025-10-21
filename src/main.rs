@@ -8,7 +8,7 @@ use axum::{
     extract::{MatchedPath, Request},
     middleware::{Next, from_fn},
     response::Response,
-    routing::{get, post},
+    routing::{get, patch, post},
 };
 
 use axum_server::Handle;
@@ -67,6 +67,10 @@ async fn main() -> Result<(), Error> {
     // Build routes
     let mut router = Router::<AppState>::new()
         .route("/ws", get(routes::ws::handler))
+        .nest(
+            "/players/{rrid}",
+            Router::<AppState>::new().route("/", patch(routes::player::register)),
+        )
         .nest(
             "/matches",
             Router::<AppState>::new()

@@ -9,4 +9,4 @@ chrono = { workspace = true }
 num_enum = { workspace = true }
 serde = { workspace = true }
 serde_repr = { workspace = true }
-derive_more = { workspace = true, features = ["display", "error", "deref"] }
+derive_more = { workspace = true, features = ["display", "error", "deref", "from"] }

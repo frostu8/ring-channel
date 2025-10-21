@@ -32,9 +32,6 @@ CREATE TABLE battle (
     id INTEGER PRIMARY KEY,
     uuid CHAR(36) NOT NULL UNIQUE,
     level_name VARCHAR(255) NOT NULL,
-    -- The victor of the match
-    -- 0 for red, 1 for blue
-    victor INTEGER,
     -- The time of wagers closing for this match
     closed_at TIMESTAMP NOT NULL,
     inserted_at TIMESTAMP NOT NULL,
@@ -45,6 +42,10 @@ CREATE TABLE participant (
     match_id INTEGER NOT NULL REFERENCES battle(id),
     player_id INTEGER NOT NULL REFERENCES player(id),
     team INTEGER NOT NULL,
+    -- The finishing place of the participant
+    placement INTEGER,
+    -- Whether the participant no contest'd
+    no_contest BOOLEAN NOT NULL DEFAULT FALSE,
 
     UNIQUE (match_id, player_id)
 );

@@ -1,10 +1,7 @@
 //! Battle data representations.
 
-pub mod player;
-
 use derive_more::Deref;
 use num_enum::{IntoPrimitive, TryFromPrimitive};
-use player::Player;
 
 use chrono::{DateTime, Utc};
 
@@ -12,7 +9,7 @@ use serde::{Deserialize, Serialize};
 
 use serde_repr::{Deserialize_repr, Serialize_repr};
 
-use crate::user::User;
+use crate::{player::Player, user::User};
 
 /// A single match.
 #[derive(Clone, Debug, Deserialize, Serialize)]

@@ -4,15 +4,11 @@ use axum::{RequestPartsExt as _, extract::FromRequestParts};
 
 use chrono::{DateTime, Utc};
 
-use derive_more::{Deref, Display, Error};
+use derive_more::Deref;
 
 use std::fmt::{self, Debug, Formatter};
 
 use http::request::Parts;
-
-use oauth2::{
-    EmptyExtraTokenFields, StandardTokenResponse, TokenResponse as _, basic::BasicTokenType,
-};
 
 use rand::{Rng, distr::Distribution};
 

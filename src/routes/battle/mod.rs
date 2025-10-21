@@ -15,7 +15,10 @@ use http::StatusCode;
 use tracing::instrument;
 use uuid::Uuid;
 
-use crate::app::{AppError, AppJson, AppState, Payload};
+use crate::{
+    app::{AppError, AppJson, AppState, Payload},
+    player::UpsertPlayer,
+};
 
 /// Creates a match.
 #[instrument(skip(state))]
@@ -47,22 +50,7 @@ pub async fn create(
 
     // re-register players
     for player in request.participants.iter() {
-        let (player_id,) = sqlx::query_as::<_, (i32,)>(
-            r#"
-            INSERT INTO player (public_key, display_name, inserted_at, updated_at)
-            VALUES ($1, $2, $3, $3)
-            ON CONFLICT (public_key) DO UPDATE
-            SET
-                display_name = $2,
-                updated_at = $3
-            RETURNING id
-            "#,
-        )
-        .bind(player.id.as_str())
-        .bind(&player.display_name)
-        .bind(now)
-        .fetch_one(&mut *tx)
-        .await?;
+        let UpsertPlayer { id, .. } = crate::player::upsert_player(player, &mut *tx).await?;
 
         // add player to match
         sqlx::query(
@@ -72,7 +60,7 @@ pub async fn create(
             "#,
         )
         .bind(match_id)
-        .bind(player_id)
+        .bind(id)
         .bind(u8::from(player.team))
         .execute(&mut *tx)
         .await?;
