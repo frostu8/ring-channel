@@ -3,6 +3,12 @@ info:
   title: Duel Channel API
   description: >
     Access API for the Duel Channel Ring Racers server. Get your Mobiums up!
+  contact:
+    name: frostu8
+    email: theguy@frostu8.rs
+  license:
+    name: CC0-1.0
+    url: https://creativecommons.org/publicdomain/zero/1.0/
   version: 0.1.0
 
 servers:
