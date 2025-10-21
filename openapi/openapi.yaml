@@ -1,8 +1,8 @@
 openapi: 3.0.4
 info:
   title: Duel Channel API
-  description: Access API for the Duel Channel Ring Racers server. Get your
-    Mobiums up!
+  description: >
+    Access API for the Duel Channel Ring Racers server. Get your Mobiums up!
   version: 0.1.0
 
 servers:
@@ -19,8 +19,11 @@ components:
       properties:
         id:
           type: string
+          description: The player's "short ID."
+          pattern: '^[A-Z]{6}$'
         display_name:
           type: string
+          description: The most-recent display name of the player.
     CreatePlayer:
       type: object
       required:
@@ -29,8 +32,15 @@ components:
       properties:
         display_name:
           type: string
+          description: The player's current display name.
         public_key:
           type: string
+          description: >
+            The player's 64-length "RRID."
+
+            Ring Racers profiles keep a public-private key pair to identify
+            themselves to servers. This is the public key, untrimmed.
+          pattern: '^[\dA-Fa-f]{64}$'
     Participant:
       allOf:
         - $ref: "#/components/schemas/Player"
@@ -41,10 +51,19 @@ components:
           propeties:
             team:
               type: integer
+              description: The team number the player is on.
             finish_time:
               type: integer
+              description: The finish time of the player, in game tics.
             no_contest:
               type: boolean
+              description: >
+                Whether or not the player was allowed to finish.
+
+                A `true` `no_contest` means that the player was absolutely not
+                allowed to finish, but a `false` `no_contest` does not imply
+                the opposite; that is, the player was able to finish. A set
+                `finish_time` will let you know if the player did finish.
     Match:
       type: object
       required:
@@ -56,19 +75,54 @@ components:
       properties:
         id:
           type: string
+          description: The match UUID.
+          pattern: '^[\dA-Fa-f]{8}-[\dA-Fa-f]{4}-[\dA-Fa-f]{4}-[\dA-Fa-f]{4}-[\dA-Fa-f]{12}$'
         level_name:
           type: string
+          description: The name of the level the match was played on.
         participants:
           type: array
+          description: A list of participants in the match.
           items:
             $ref: "#/components/schemas/Participant"
         status:
           $ref: "#/components/schemas/MatchStatus"
         accepting_bets:
           type: boolean
+          description: Whether or not the match is still accepting bets.
         closes_at:
           type: string
+          description: The time when the bets close.
           format: date-time
+    CreateMatch:
+      type: object
+      required:
+        - level_name
+        - participants
+      properties:
+        level_name:
+          type: string
+          description: The name of the level the match will be played on.
+        participants:
+          type: array
+          description: A list of participants ids and their details.
+          items:
+            type: object
+            required:
+              - id
+              - team
+            properties:
+              id:
+                type: string
+                description: A player's "short ID."
+                pattern: '^[A-Z]{6}$'
+              team:
+                type: integer
+                description: The team number of the player.
+        bet_time:
+          type: integer
+          description: >
+            The amount of time to give to betting users before bets close.
     UpdateMatch:
       type: object
       properties:
@@ -79,7 +133,9 @@ components:
       properties:
         finish_time:
           type: integer
+          description: The finish time of the player, in game tics.
     MatchStatus:
+      type: integer
       description: >
         The status of a match.
 
@@ -91,17 +147,42 @@ components:
         * `2` **Cancelled**  
           The match ended abnormally. It may not have a victor, and wagers were
           returned.
-      type: integer
       enum: [0, 1, 2]
     Error:
+      type: object
       description: >
         A generic API error.
-      type: object
       required:
         - message
       properties:
         message:
           type: string
+          description: A description of the error.
+  examples:
+    matchExample:
+      id: 18e0b086-5557-4245-877d-19729bf6d4bd
+      level_name: Robotnik Coaster
+      participants:
+        - id: GJBIJK
+          display_name: Dr. Robotnik
+          team: 0
+          no_contest: false
+        - id: 4ZWBU0
+          display_name: Tails
+          team: 1
+          no_contest: false
+      status: 0
+      accepting_bets: true
+      closes_at: 2025-10-21T04:45:32.287657947Z
+    participantExample:
+      id: GJBIJK
+      display_name: Dr. Robotnik
+      team: 0
+      finish_time: 36149
+      no_contest: false
+    playerExample:
+      id: 4ZWBU0
+      display_name: Tails
 
 paths:
   /matches:
@@ -115,6 +196,23 @@ paths:
 
         A match's bet end time will be determined as soon as it's created.
         Bets will begin to march even during this response!
+      requestBody:
+        description: The match setup details.
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateMatch"
+            example:
+              level_name: Robotnik Coaster
+              bet_time: 15
+              participants:
+                - id: GJBIJK
+                  team: 0
+                - id: 4ZWBU0
+                  team: 1
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: "#/components/schemas/CreateMatch"
       responses:
         "201":
           description: The created match.
@@ -122,6 +220,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Match"
+              example:
+                $ref: "#/components/examples/matchExample"
         "400":
           description: >
             A participant was added to the match that does not exist.
@@ -144,12 +244,16 @@ paths:
           required: true
           schema:
             type: string
+            example: 18e0b086-5557-4245-877d-19729bf6d4bd
+            pattern: '^[\dA-Fa-f]{8}-[\dA-Fa-f]{4}-[\dA-Fa-f]{4}-[\dA-Fa-f]{4}-[\dA-Fa-f]{12}$'
       requestBody:
         description: The properties to update about the match.
         content:
           application/json:
             schema:
               $ref: "#/components/schemas/UpdateMatch"
+            example:
+              status: 1
           application/x-www-form-urlencoded:
             schema:
               $ref: "#/components/schemas/UpdateMatch"
@@ -160,6 +264,21 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Match"
+              example:
+                id: 18e0b086-5557-4245-877d-19729bf6d4bd
+                level_name: Robotnik Coaster
+                participants:
+                  - id: GJBIJK
+                    display_name: Dr. Robotnik
+                    team: 0
+                    finish_time: 36149
+                    no_contest: false
+                  - id: 4ZWBU0
+                    display_name: Tails
+                    team: 0
+                    no_contest: true
+                status: 1
+                accepting_bets: false
         "400":
           description: >
             Attempted to modify an already concluded match.
@@ -196,18 +315,24 @@ paths:
           required: true
           schema:
             type: string
+            example: 18e0b086-5557-4245-877d-19729bf6d4bd
+            pattern: '^[\dA-Fa-f]{8}-[\dA-Fa-f]{4}-[\dA-Fa-f]{4}-[\dA-Fa-f]{4}-[\dA-Fa-f]{12}$'
         - name: player_id
           in: path
           description: Player ID
           required: true
           schema:
             type: string
+            example: GJBIJK
+            pattern: '^[A-Z]{6}$'
       requestBody:
         description: The new player's placement information.
         content:
           application/json:
             schema:
               $ref: "#/components/schemas/UpdatePlacement"
+            example:
+              finish_time: 36149
           application/x-www-form-urlencoded:
             schema:
               $ref: "#/components/schemas/UpdatePlacement"
@@ -218,6 +343,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Participant"
+              example:
+                $ref: "#/components/examples/participantExample"
         "400":
           description: >
             Attempted to modify an already concluded match.
@@ -251,6 +378,9 @@ paths:
           application/json:
             schema:
               $ref: "#/components/schemas/CreatePlayer"
+            example:
+              display_name: Tails
+              public_key: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
           application/x-www-form-urlencoded:
             schema:
               $ref: "#/components/schemas/CreatePlayer"
@@ -261,4 +391,6 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Player"
+              example:
+                $ref: "#/components/examples/playerExample"
               
