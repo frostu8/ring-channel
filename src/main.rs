@@ -1,4 +1,4 @@
-use std::{io, net::SocketAddr, path::PathBuf, sync::Arc};
+use std::{env, io, net::SocketAddr, path::PathBuf, sync::Arc};
 
 use http::{Method, header};
 
@@ -39,13 +39,23 @@ use tower_http::{
 use tower_sessions::{Expiry, SessionManagerLayer, cookie::SameSite};
 use tower_sessions_moka_store::MokaStore;
 
+use tracing_subscriber::{
+    filter::{EnvFilter, LevelFilter},
+    fmt,
+};
+
 const OPENAPI_FILE: &str =
     include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/openapi/openapi.yaml"));
 
 #[main]
 async fn main() -> Result<(), Error> {
     dotenv::dotenv().ok();
-    tracing_subscriber::fmt::fmt()
+    fmt::fmt()
+        .with_env_filter(
+            EnvFilter::builder()
+                .with_default_directive(LevelFilter::INFO.into())
+                .from_env_lossy(),
+        )
         .with_writer(io::stderr)
         .init();
 
