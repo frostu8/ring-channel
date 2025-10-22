@@ -35,6 +35,9 @@ oauth2 = "5"
 reqwest = "0.12"
 twilight-model = "0.16"
 twilight-http = "0.16"
+clap = { version = "4", features = ["derive"] }
+sha2 = "0.10"
+base16 = "0.2"
 
 [workspace]
 resolver = "3"

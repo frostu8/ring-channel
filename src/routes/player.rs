@@ -14,7 +14,10 @@ use sqlx::FromRow;
 
 use tracing::instrument;
 
-use crate::app::{AppError, AppJson, AppState, Payload, error::AppErrorKind};
+use crate::{
+    app::{AppError, AppJson, AppState, Payload, error::AppErrorKind},
+    auth::api_key::ServerAuthentication,
+};
 
 pub const MAX_INSERT_ATTEMPTS: usize = 25;
 
@@ -23,6 +26,7 @@ pub const MAX_INSERT_ATTEMPTS: usize = 25;
 /// All players must be registered to create matches for them!
 #[instrument(skip(state))]
 pub async fn register(
+    _auth_guard: ServerAuthentication,
     State(state): State<AppState>,
     Payload(request): Payload<RegisterPlayerRequest>,
 ) -> Result<(StatusCode, AppJson<Player>), AppError> {

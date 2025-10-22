@@ -138,6 +138,12 @@ impl AppError {
                     message: "Missing request content type".into(),
                 },
             ),
+            AppErrorKind::Unauthenticated => (
+                StatusCode::UNAUTHORIZED,
+                ApiError {
+                    message: "No API key passed; set an X-API-Key header!".into(),
+                },
+            ),
             AppErrorKind::InvalidState { .. } => (
                 StatusCode::BAD_REQUEST,
                 ApiError {
@@ -233,6 +239,10 @@ pub enum AppErrorKind {
     /// The server cannot serve this content type.
     #[from(ignore)]
     UnsupportedContentType(String),
+    /// The client attempted to access a protected endpoint without
+    /// authentication.
+    #[display("No authentication given")]
+    Unauthenticated,
     /// An error with the session occured.
     #[display("{} {}: {}", _0.0, _0.0.canonical_reason().unwrap_or("Error"), _0.1)]
     #[from(ignore)]

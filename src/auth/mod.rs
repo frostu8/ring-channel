@@ -1,5 +1,6 @@
 //! User authentication.
 
+pub mod api_key;
 pub mod oauth2;
 
 use axum::extract::{FromRef, FromRequestParts};

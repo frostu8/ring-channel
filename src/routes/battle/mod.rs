@@ -22,11 +22,15 @@ use tracing::instrument;
 
 use uuid::Uuid;
 
-use crate::app::{AppError, AppJson, AppState, Payload, error::AppErrorKind};
+use crate::{
+    app::{AppError, AppJson, AppState, Payload, error::AppErrorKind},
+    auth::api_key::ServerAuthentication,
+};
 
 /// Creates a match.
 #[instrument(skip(state))]
 pub async fn create(
+    _auth_guard: ServerAuthentication,
     State(state): State<AppState>,
     Payload(request): Payload<CreateBattleRequest>,
 ) -> Result<(StatusCode, AppJson<Battle>), AppError> {
@@ -128,6 +132,7 @@ pub async fn create(
 /// Updates a match.
 #[instrument(skip(state))]
 pub async fn update(
+    _auth_guard: ServerAuthentication,
     Path((uuid,)): Path<(Uuid,)>,
     State(state): State<AppState>,
     Payload(request): Payload<UpdateBattleRequest>,

@@ -1,9 +1,11 @@
-use std::{net::SocketAddr, sync::Arc};
+use std::{io, net::SocketAddr, path::PathBuf, sync::Arc};
 
 use http::{Method, header};
 
 // :(
 use time::Duration;
+
+use clap::Parser;
 
 use axum::{
     Router,
@@ -18,13 +20,14 @@ use axum_server::Handle;
 use ring_channel::{
     app::{AppError, AppState},
     auth::oauth2::OauthState,
+    cli::{Args, Command, register_server},
     config::read_config,
     routes, ws,
 };
 
 use anyhow::Error;
 
-use sqlx::pool::PoolOptions;
+use sqlx::{Connection, SqliteConnection, pool::PoolOptions};
 
 use tokio::{main, select, signal};
 
@@ -42,18 +45,47 @@ const OPENAPI_FILE: &str =
 #[main]
 async fn main() -> Result<(), Error> {
     dotenv::dotenv().ok();
-    tracing_subscriber::fmt::init();
+    tracing_subscriber::fmt::fmt()
+        .with_writer(io::stderr)
+        .init();
+
+    let cli = Args::parse();
+
+    let config_path = match cli.config {
+        Some(path) => path,
+        None => PathBuf::from("config_toml"),
+    };
 
     // Read config file
-    let config = Arc::new(read_config("config.toml")?);
-
-    tracing::info!("establishing connection to database");
+    let config = Arc::new(read_config(config_path)?);
 
     let database_url = config
         .server
         .database_url
         .clone()
         .ok_or_else(|| Error::msg("No `DATABASE_URL` set!"))?;
+
+    // Run any pending commands
+    if let Some(command) = cli.command.as_ref() {
+        match command {
+            Command::RegisterServer(server) => {
+                // establish connection
+                let mut conn = SqliteConnection::connect(&database_url).await?;
+                let mut tx = conn.begin().await?;
+
+                tracing::info!("registering server {}", server.server_name);
+
+                register_server(server, &mut tx).await?;
+
+                tx.commit().await?;
+                conn.close().await?;
+            }
+        }
+
+        return Ok(());
+    }
+
+    tracing::info!("establishing connection to database");
 
     // Connect to sqlite database
     let db = PoolOptions::new().connect(&database_url).await?;

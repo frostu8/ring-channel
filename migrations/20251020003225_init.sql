@@ -18,6 +18,15 @@ CREATE TABLE discord_auth (
     updated_at TIMESTAMP NOT NULL
 );
 
+-- Registered servers
+CREATE TABLE server (
+    id INTEGER PRIMARY KEY,
+    server_name VARCHAR(255) NOT NULL UNIQUE,
+    key_hash CHAR(64) NOT NULL UNIQUE,
+    inserted_at TIMESTAMP NOT NULL,
+    updated_at TIMESTAMP NOT NULL
+);
+
 -- A list of RR profiles
 CREATE TABLE player (
     id INTEGER PRIMARY KEY,

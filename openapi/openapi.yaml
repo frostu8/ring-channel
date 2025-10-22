@@ -22,6 +22,11 @@ tags:
     description: Endpoints that operate only on players.
 
 components:
+  securitySchemes:
+    apiKey:
+      type: apiKey
+      in: header
+      name: X-API-KEY
   schemas:
     Player:
       type: object
@@ -215,6 +220,8 @@ paths:
 
         A match's bet end time will be determined as soon as it's created.
         Bets will begin to march even during this response!
+      security:
+        - apiKey: []
       operationId: create_match
       requestBody:
         description: The match setup details.
@@ -258,6 +265,8 @@ paths:
       description: >
         **This endpoint cannot modify concluded matches.** When matches are
         concluded through this endpoint, they are locked.
+      security:
+        - apiKey: []
       operationId: modify_match
       parameters:
         - name: match_id
@@ -330,6 +339,8 @@ paths:
         If the match is concluded, you will be unable to update a player's
         placements. The only way to set a `no_contest` value is by concluding
         the match without updating the player's placement.
+      security:
+        - apiKey: []
       operationId: modify_player_placement
       parameters:
         - name: match_id
@@ -395,6 +406,8 @@ paths:
       description: >
         This endpoint is idempotent; given the same public key, it will always
         return the same id for the player.
+      security:
+        - apiKey: []
       operationId: register_player
       requestBody:
         description: The details of the player to register.
