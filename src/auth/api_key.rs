@@ -87,7 +87,7 @@ where
                     Ok(auth)
                 }
                 // api key matches nothing
-                None => Err(AppErrorKind::Unauthenticated.into()),
+                None => Err(AppErrorKind::BadCredentials.into()),
             }
         } else {
             Err(AppErrorKind::Unauthenticated.into())

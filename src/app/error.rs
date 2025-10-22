@@ -144,6 +144,12 @@ impl AppError {
                     message: "No API key passed; set an X-API-Key header!".into(),
                 },
             ),
+            AppErrorKind::BadCredentials => (
+                StatusCode::UNAUTHORIZED,
+                ApiError {
+                    message: "API key was malformed".into(),
+                },
+            ),
             AppErrorKind::InvalidState { .. } => (
                 StatusCode::BAD_REQUEST,
                 ApiError {
@@ -243,6 +249,9 @@ pub enum AppErrorKind {
     /// authentication.
     #[display("No authentication given")]
     Unauthenticated,
+    /// The client presented bad credentials.
+    #[display("Bad credentials given")]
+    BadCredentials,
     /// An error with the session occured.
     #[display("{} {}: {}", _0.0, _0.0.canonical_reason().unwrap_or("Error"), _0.1)]
     #[from(ignore)]
