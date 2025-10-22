@@ -119,7 +119,9 @@ async fn main() -> Result<(), Error> {
         //.route("/ws", get(routes::ws::handler))
         .nest(
             "/players",
-            Router::<AppState>::new().route("/", post(routes::player::register)),
+            Router::<AppState>::new()
+                .route("/", post(routes::player::register))
+                .route("/{player_id}", get(routes::player::show)),
         )
         .nest(
             "/matches",

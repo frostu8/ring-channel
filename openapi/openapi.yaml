@@ -398,6 +398,41 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
+  /players/{player_id}:
+    get:
+      tags:
+        - player
+      summary: Fetch Player
+      description: >
+        Gets the latest information about the given player.
+
+        This endpoint cannot be used to get a player's public key.
+      operationId: get_player
+      parameters:
+        - name: player_id
+          in: path
+          description: Player ID
+          required: true
+          schema:
+            type: string
+            example: GJBIJK
+            pattern: '^[\dA-Z]{6}$'
+      responses:
+        "200":
+          description: The player.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Player"
+              examples:
+                playerExample:
+                  $ref: "#/components/examples/playerExample"
+        "404":
+          description: The player with that ID does not exist.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
   /players:
     post:
       tags:
@@ -432,4 +467,3 @@ paths:
               examples:
                 playerExample:
                   $ref: "#/components/examples/playerExample"
-              

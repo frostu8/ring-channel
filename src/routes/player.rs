@@ -1,6 +1,6 @@
 //! Active player routes.
 
-use axum::extract::State;
+use axum::extract::{Path, State};
 
 use chrono::Utc;
 
@@ -21,6 +21,34 @@ use crate::{
 
 pub const MAX_INSERT_ATTEMPTS: usize = 25;
 
+/// Shows a player.
+#[instrument(skip(state))]
+pub async fn show(
+    Path((short_id,)): Path<(String,)>,
+    State(state): State<AppState>,
+) -> Result<AppJson<Player>, AppError> {
+    #[derive(FromRow)]
+    struct PlayerQuery {
+        display_name: String,
+    }
+
+    let player = sqlx::query_as::<_, PlayerQuery>(
+        r#"
+        SELECT display_name FROM player WHERE short_id = $1
+        "#,
+    )
+    .bind(&short_id)
+    .fetch_optional(&state.db)
+    .await?
+    .ok_or_else(|| AppError::not_found(format!("Player {} not found", short_id)))?;
+
+    Ok(AppJson(Player {
+        id: short_id,
+        display_name: player.display_name,
+        public_key: None,
+    }))
+}
+
 /// Registers a joined player.
 ///
 /// All players must be registered to create matches for them!
@@ -32,13 +60,8 @@ pub async fn register(
 ) -> Result<(StatusCode, AppJson<Player>), AppError> {
     #[derive(FromRow)]
     struct UpsertQuery {
-        /// The "short ID" of the player.
-        ///
-        /// This is used on the frontend to uniquely identify a player in lieu of
-        /// their public key.
-        pub short_id: String,
-        /// The display_name of the player.
-        pub display_name: String,
+        short_id: String,
+        display_name: String,
     }
 
     let mut tx = state.db.begin().await?;
