@@ -130,6 +130,7 @@ async fn main() -> Result<(), Error> {
                 .nest(
                     "/{battle_id}",
                     Router::<AppState>::new()
+                        .route("/", get(routes::battle::show))
                         .route("/", patch(routes::battle::update))
                         .route("/players/{short_id}", patch(routes::battle::player::update))
                         .route("/wagers", post(routes::battle::wager::create)),

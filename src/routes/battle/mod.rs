@@ -27,6 +27,60 @@ use crate::{
     auth::api_key::ServerAuthentication,
 };
 
+/// Shows an existing match.
+#[instrument(skip(state))]
+pub async fn show(
+    Path((uuid,)): Path<(Uuid,)>,
+    State(state): State<AppState>,
+) -> Result<AppJson<Battle>, AppError> {
+    #[derive(FromRow)]
+    struct BattleQuery {
+        level_name: String,
+        #[sqlx(try_from = "u8")]
+        status: BattleStatus,
+        closed_at: DateTime<Utc>,
+    }
+
+    let mut conn = state.db.acquire().await?;
+
+    let now = Utc::now();
+
+    let battle = sqlx::query_as::<_, BattleQuery>(
+        r#"
+        SELECT level_name, status, closed_at
+        FROM battle
+        WHERE uuid = $1
+        "#,
+    )
+    .bind(uuid.hyphenated().to_string())
+    .fetch_optional(&mut *conn)
+    .await?;
+
+    let Some(battle) = battle else {
+        return Err(AppError::not_found(format!("Match {} not found", uuid)));
+    };
+
+    // Create battle struct
+    let accepting_bets = now < battle.closed_at;
+    let mut battle = Battle {
+        id: uuid.hyphenated().to_string(),
+        level_name: battle.level_name,
+        // We will preload this in a sec
+        participants: vec![],
+        status: battle.status,
+        accepting_bets,
+        closes_at: if accepting_bets {
+            Some(battle.closed_at)
+        } else {
+            None
+        },
+    };
+
+    preload_participants(&mut battle, &mut *conn).await?;
+
+    Ok(AppJson(battle))
+}
+
 /// Creates a match.
 #[instrument(skip(state))]
 pub async fn create(

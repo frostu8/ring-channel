@@ -188,14 +188,14 @@ components:
           - id: GJBIJK
             display_name: Dr. Robotnik
             team: 0
+            finish_time: 36149
             no_contest: false
           - id: 4ZWBU0
             display_name: Tails
             team: 1
-            no_contest: false
-        status: 0
-        accepting_bets: true
-        closes_at: 2025-10-21T04:45:32.287657947Z
+            no_contest: true
+        status: 1
+        accepting_bets: false
     participantExample:
       value:
         id: GJBIJK
@@ -207,6 +207,9 @@ components:
       value:
         id: 4ZWBU0
         display_name: Tails
+    unauthenticatedErrorExample:
+      value:
+        message: No API key passed; set an X-API-Key header!
 
 paths:
   /matches:
@@ -247,9 +250,21 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Match"
-              examples:
-                matchExample:
-                  $ref: "#/components/examples/matchExample"
+              example:
+                id: 18e0b086-5557-4245-877d-19729bf6d4bd
+                level_name: Robotnik Coaster
+                participants:
+                  - id: GJBIJK
+                    display_name: Dr. Robotnik
+                    team: 0
+                    no_contest: false
+                  - id: 4ZWBU0
+                    display_name: Tails
+                    team: 1
+                    no_contest: false
+                status: 0
+                accepting_bets: true
+                closes_at: 2025-10-21T04:45:32.287657947Z
         "400":
           description: >
             A participant was added to the match that does not exist.
@@ -257,7 +272,50 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
+        "401":
+          description: Client is unauthenticated.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              examples:
+                unauthenticatedErrorExample:
+                  $ref: "#/components/examples/unauthenticatedErrorExample"
   /matches/{match_id}:
+    get:
+      tags:
+        - match
+      summary: Fetch Match
+      description: >
+        Fetches a passed or ongoing match.
+      security: []
+      operationId: fetch_match
+      parameters:
+        - name: match_id
+          in: path
+          description: Match UUID
+          required: true
+          schema:
+            type: string
+            example: 18e0b086-5557-4245-877d-19729bf6d4bd
+            pattern: '^[\dA-Fa-f]{8}-[\dA-Fa-f]{4}-[\dA-Fa-f]{4}-[\dA-Fa-f]{4}-[\dA-Fa-f]{12}$'
+      responses:
+        "200":
+          description: The updated match.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Match"
+              examples:
+                matchExample:
+                  $ref: "#/components/examples/matchExample"
+        "404":
+          description: >
+            Requested match does not exist.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
     patch:
       tags:
         - match
@@ -295,21 +353,9 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Match"
-              example:
-                id: 18e0b086-5557-4245-877d-19729bf6d4bd
-                level_name: Robotnik Coaster
-                participants:
-                  - id: GJBIJK
-                    display_name: Dr. Robotnik
-                    team: 0
-                    finish_time: 36149
-                    no_contest: false
-                  - id: 4ZWBU0
-                    display_name: Tails
-                    team: 0
-                    no_contest: true
-                status: 1
-                accepting_bets: false
+              examples:
+                matchExample:
+                  $ref: "#/components/examples/matchExample"
         "400":
           description: >
             Attempted to modify an already concluded match.
@@ -320,6 +366,15 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
+        "401":
+          description: Client is unauthenticated.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              examples:
+                unauthenticatedErrorExample:
+                  $ref: "#/components/examples/unauthenticatedErrorExample"
         "404":
           description: >
             Requested match does not exist.
@@ -390,6 +445,15 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
+        "401":
+          description: Client is unauthenticated.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              examples:
+                unauthenticatedErrorExample:
+                  $ref: "#/components/examples/unauthenticatedErrorExample"
         "404":
           description: >
             The match does not exist, the player does not exist, or the player
@@ -407,6 +471,7 @@ paths:
         Gets the latest information about the given player.
 
         This endpoint cannot be used to get a player's public key.
+      security: []
       operationId: get_player
       parameters:
         - name: player_id
@@ -467,3 +532,12 @@ paths:
               examples:
                 playerExample:
                   $ref: "#/components/examples/playerExample"
+        "401":
+          description: Client is unauthenticated.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              examples:
+                unauthenticatedErrorExample:
+                  $ref: "#/components/examples/unauthenticatedErrorExample"
