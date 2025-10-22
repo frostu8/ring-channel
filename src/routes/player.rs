@@ -78,7 +78,7 @@ pub async fn register(
             AppJson(Player {
                 id: player.short_id,
                 display_name: player.display_name,
-                public_key: None,
+                public_key: Some(request.public_key),
             }),
         ))
     } else {
@@ -137,7 +137,7 @@ pub async fn register(
                 AppJson(Player {
                     id: player.short_id,
                     display_name: player.display_name,
-                    public_key: None,
+                    public_key: Some(request.public_key),
                 }),
             ))
         } else {

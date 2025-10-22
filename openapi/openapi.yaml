@@ -36,6 +36,10 @@ components:
         display_name:
           type: string
           description: The most-recent display name of the player.
+        public_key:
+          type: string
+          description: The player's 64-length "RRID."
+          pattern: '^[\dA-Fa-f]{64}$'
     CreatePlayer:
       type: object
       required:
