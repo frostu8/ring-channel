@@ -196,6 +196,7 @@ pub async fn login(
 
     tx.commit().await?;
 
+    session.shuffle_csrf().await?;
     session.set_user(user_id).await?; // attach user to session
 
     if let Some(redirect_url) = oauth_state.redirect_to.as_ref() {
