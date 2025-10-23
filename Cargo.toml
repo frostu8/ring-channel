@@ -27,7 +27,7 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 serde_repr = { workspace = true }
 uuid = { version = "1", features = ["serde", "v4"] }
 serde_json = "1"
-tower-sessions = { version = "0.14", default-features = false, features = ["axum-core"] }
+tower-sessions = { version = "0.14", default-features = false, features = ["axum-core", "private"] }
 tower-sessions-moka-store = "0.15"
 time = "0.3"
 rand = "0.9"
@@ -39,6 +39,7 @@ clap = { version = "4", features = ["derive"] }
 sha2 = "0.10"
 base16 = "0.2"
 tower-sessions-sqlx-store = { version = "0.15.0", features = ["sqlite"] }
+cookie = { version = "0.18.1", features = ["private"] }
 
 [workspace]
 resolver = "3"

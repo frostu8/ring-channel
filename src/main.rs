@@ -38,8 +38,10 @@ use tower_http::{
 
 use tower_sessions::{CachingSessionStore, Expiry, SessionManagerLayer, cookie::SameSite};
 use tower_sessions_moka_store::MokaStore;
-
 use tower_sessions_sqlx_store::SqliteStore;
+
+use cookie::Key;
+
 use tracing_subscriber::{
     filter::{EnvFilter, LevelFilter},
     fmt,
@@ -91,10 +93,41 @@ async fn main() -> Result<(), Error> {
                 tx.commit().await?;
                 conn.close().await?;
             }
+            Command::GenerateKey(_) => {
+                tracing::info!("generated! set ENCRYPTION_KEY or server.encryption_key on boot");
+
+                let key = Key::generate();
+                let key = base16::encode_lower(key.master());
+                println!("{}", key);
+            }
         }
 
         return Ok(());
     }
+
+    let encryption_key = if let Some(key_str) = config.server.encryption_key.as_ref() {
+        if key_str.len() > 128 {
+            tracing::error!("encryption key too long! generate with `ring-channel generate-key`");
+            std::process::exit(1);
+        }
+
+        let mut key = [0u8; 64];
+        base16::decode_slice(&key_str[..], &mut key)?;
+
+        match Key::try_from(&key[..]) {
+            Ok(key) => key,
+            Err(err) => {
+                tracing::error!("bad encryption key: {}", err);
+                std::process::exit(1);
+            }
+        }
+    } else {
+        tracing::warn!(
+            "generating runtime encryption key! sessions will stop working after restart"
+        );
+        tracing::warn!("generate a permanent key with `ring-channel generate-key`");
+        Key::generate()
+    };
 
     tracing::info!("establishing connection to database");
 
@@ -168,6 +201,7 @@ async fn main() -> Result<(), Error> {
         .with_expiry(Expiry::OnInactivity(Duration::days(30)))
         .with_http_only(true)
         .with_same_site(SameSite::Lax)
+        .with_private(encryption_key)
         .with_secure(config.server.secure_sessions);
 
     // Finalize router

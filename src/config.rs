@@ -36,6 +36,8 @@ pub struct ServerConfig {
     ///
     /// By default, this is `true` to avoid misconfiguration.
     pub secure_sessions: bool,
+    /// Key used to encrypt cookies.
+    pub encryption_key: Option<String>,
 }
 
 impl Default for ServerConfig {
@@ -45,6 +47,7 @@ impl Default for ServerConfig {
             redirect_url: None,
             database_url: None,
             secure_sessions: true,
+            encryption_key: None,
         }
     }
 }
@@ -80,6 +83,7 @@ pub fn read_config(config_file: impl AsRef<Path>) -> Result<Config, Error> {
             "DATABASE_URL" => Some(Uncased::from("server.database_url")),
             "DISCORD_CLIENT_ID" => Some(Uncased::from("discord.client_id")),
             "DISCORD_CLIENT_SECRET" => Some(Uncased::from("discord.client_secret")),
+            "ENCRYPTION_KEY" => Some(Uncased::from("server.encryption_key")),
             "PORT" => Some(Uncased::from("http.port")),
             _ => None,
         }))

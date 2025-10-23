@@ -28,6 +28,8 @@ pub struct Args {
 pub enum Command {
     #[command(name = "register")]
     RegisterServer(RegisterServer),
+    #[command(name = "generate-key")]
+    GenerateKey(GenerateKey),
 }
 
 /// Registers a server with the ring channel API.
@@ -36,6 +38,12 @@ pub struct RegisterServer {
     /// The name of the server to register.
     pub server_name: String,
 }
+
+/// Generates an encryption key to encrypt cookies.
+///
+/// Does nothing but spit out a key that can be read back by the server later.
+#[derive(clap::Args, Debug)]
+pub struct GenerateKey;
 
 /// Registers a server.
 pub async fn register_server(
