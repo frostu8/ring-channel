@@ -1,6 +1,6 @@
 use std::{env, io, net::SocketAddr, path::PathBuf, sync::Arc};
 
-use http::{Method, header};
+use http::{HeaderValue, Method, header};
 
 // :(
 use time::Duration;
@@ -141,7 +141,7 @@ async fn main() -> Result<(), Error> {
     };
 
     // Build routes
-    let mut router = Router::<AppState>::new()
+    let mut api_routes = Router::<AppState>::new()
         //.route("/ws", get(routes::ws::handler))
         .nest(
             "/players",
@@ -166,16 +166,6 @@ async fn main() -> Result<(), Error> {
             "/users",
             Router::<AppState>::new().route("/~me", get(routes::user::show_me)),
         )
-        // serve openapi spec
-        .merge(
-            Router::<AppState>::new()
-                .route("/openapi.yaml", get(serve_openapi))
-                .layer(
-                    CorsLayer::new()
-                        .allow_methods([Method::GET])
-                        .allow_origin(Any),
-                ),
-        )
         .with_state(state);
 
     if let Some(discord_config) = config.discord.as_ref() {
@@ -187,7 +177,7 @@ async fn main() -> Result<(), Error> {
             .route("/users/~login", get(routes::user::auth::login))
             .with_state(oauth_state);
 
-        router = router.merge(oauth_router);
+        api_routes = api_routes.merge(oauth_router);
 
         tracing::info!(
             client_id = { discord_config.client_id },
@@ -213,7 +203,18 @@ async fn main() -> Result<(), Error> {
         .with_secure(config.server.secure_sessions);
 
     // Finalize router
-    let router = router
+    let router = Router::new()
+        .merge(api_routes.layer(from_fn(security_headers)))
+        // serve openapi spec
+        .merge(
+            Router::new()
+                .route("/openapi.yaml", get(serve_openapi))
+                .layer(
+                    CorsLayer::new()
+                        .allow_methods([Method::GET])
+                        .allow_origin(Any),
+                ),
+        )
         .layer(session_layer)
         .layer(
             TraceLayer::new_for_http()
@@ -264,6 +265,29 @@ async fn serve_openapi() -> impl IntoResponse {
         )],
         OPENAPI_FILE,
     )
+}
+
+async fn security_headers(request: Request, next: Next) -> Response {
+    let mut res = next.run(request).await;
+
+    res.headers_mut().extend([
+        (header::CACHE_CONTROL, HeaderValue::from_static("no-store")),
+        (
+            header::CONTENT_SECURITY_POLICY,
+            HeaderValue::from_static("frame-ancestors 'none'"),
+        ),
+        (
+            header::X_CONTENT_TYPE_OPTIONS,
+            HeaderValue::from_static("nosniff"),
+        ),
+        (header::X_FRAME_OPTIONS, HeaderValue::from_static("DENY")),
+        // (
+        //     header::STRICT_TRANSPORT_SECURITY,
+        //     HeaderValue::try_from(format!("max-age={}", hsts_time)).expect("valid hsts time"),
+        // ),
+    ]);
+
+    res
 }
 
 // Stolen from: https://github.com/tokio-rs/axum/blob/main/examples/error-handling/src/main.rs
