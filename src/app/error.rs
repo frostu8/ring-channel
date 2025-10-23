@@ -168,10 +168,16 @@ impl AppError {
                     message: "Invalid state sent".into(),
                 },
             ),
-            AppErrorKind::SessionFetch((code, message)) => (
+            AppErrorKind::CookieFetch((code, message)) => (
                 code,
                 ApiError {
                     message: message.into(),
+                },
+            ),
+            AppErrorKind::MissingHostHeader => (
+                StatusCode::BAD_REQUEST,
+                ApiError {
+                    message: "Missing Host header".into(),
                 },
             ),
             // fallthrough for internal server errors not turned into user
@@ -274,7 +280,10 @@ pub enum AppErrorKind {
     /// An error with the session occured.
     #[display("{} {}: {}", _0.0, _0.0.canonical_reason().unwrap_or("Error"), _0.1)]
     #[from(ignore)]
-    SessionFetch((StatusCode, &'static str)),
+    CookieFetch((StatusCode, &'static str)),
+    /// A host header was missing, which is used to identify the server when
+    /// sending cookies.
+    MissingHostHeader,
     /// An error getting session data occured.
     Session(tower_sessions::session::Error),
     /// A request to the Discord API failed.

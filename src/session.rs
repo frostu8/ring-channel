@@ -5,13 +5,24 @@ use axum::{
     extract::{FromRef, FromRequestParts},
 };
 
+use cookie::{Cookie, SameSite};
+
 use derive_more::Deref;
+
 use ring_channel_model::User;
+
 use sqlx::FromRow;
 
-use std::fmt::{self, Debug, Formatter};
+use time::Duration;
 
-use http::request::Parts;
+use tower_cookies::Cookies;
+
+use std::{
+    borrow::Cow,
+    fmt::{self, Debug, Formatter},
+};
+
+use http::{header, request::Parts};
 
 use rand::{Rng, distr::Distribution};
 
@@ -21,6 +32,8 @@ use tower_sessions::Session as TowerSession;
 
 use crate::app::{AppError, AppState, error::AppErrorKind};
 
+pub type SessionError = tower_sessions::session::Error;
+
 /// A session, used to keep state.
 ///
 /// **Warning!** These sessions are short-lived and are simply to carry some
@@ -29,21 +42,21 @@ use crate::app::{AppError, AppState, error::AppErrorKind};
 /// These are not for credentials!
 #[derive(Clone, Deref)]
 pub struct Session {
-    #[allow(dead_code)]
     session: TowerSession,
+    // too cute of a name
+    cookie_jar: Cookies,
     #[deref]
     data: SessionData,
+    host: String,
 }
 
 /// Inner session data.
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct SessionData {
-    /// A randomly generated state string.
-    ///
-    /// See [discord's docs] on how they suggest to use state.
-    ///
-    /// [discord's docs]: https://discord.com/developers/docs/topics/oauth2#state-and-security
+    /// A randomly generated token for OAuth2 flows.
     pub state: String,
+    /// A randomly generated csrf token.
+    pub csrf: String,
     /// The identity of the user.
     ///
     /// This is the user's ID in the database. If this is `None`, this is an
@@ -59,20 +72,45 @@ impl Session {
     ///
     /// **Only call this if you are confident the user has followed the proper
     /// authentication flow!**
-    pub async fn set_user(&mut self, user_id: i32) -> Result<(), tower_sessions::session::Error> {
+    pub async fn set_user(&mut self, user_id: i32) -> Result<(), SessionError> {
         self.data.identity = Some(user_id);
-        self.session
-            .insert(Session::SESSION_KEY, &self.data)
-            .await?;
+        self.update_data().await?;
 
         Ok(())
+    }
+
+    /// Shuffles the CSRF token.
+    ///
+    /// When a mutation is finished on the server, this should always be
+    /// called.
+    pub async fn shuffle_csrf(&mut self) -> Result<(), SessionError> {
+        self.data.csrf = generate_csrf();
+        self.update_data().await?;
+
+        let one_year = time::OffsetDateTime::now_utc() + Duration::days(365);
+
+        // update csrf cookie
+        let mut csrf_cookie = Cookie::new("csrf", Cow::Owned(self.data.csrf.clone()));
+        csrf_cookie.set_http_only(false); // make sure js can access this cookie
+        csrf_cookie.set_same_site(SameSite::Strict);
+        csrf_cookie.set_expires(one_year);
+        csrf_cookie.set_path("/");
+        csrf_cookie.set_domain(Cow::Owned(self.host.clone()));
+
+        self.cookie_jar.add(csrf_cookie);
+
+        Ok(())
+    }
+
+    async fn update_data(&self) -> Result<(), SessionError> {
+        self.session.insert(Session::SESSION_KEY, &self.data).await
     }
 }
 
 impl Debug for Session {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         f.debug_struct("Session")
-            .field("state", &self.data.state)
+            .field("state", &self.data.csrf)
             .field("identity", &self.data.identity)
             .finish()
     }
@@ -85,10 +123,22 @@ where
     type Rejection = AppError;
 
     async fn from_request_parts(parts: &mut Parts, _state: &S) -> Result<Self, Self::Rejection> {
+        // get hostname
+        let host = parts
+            .headers
+            .get(header::HOST)
+            .and_then(|h| h.to_str().ok())
+            .map(|s| s.to_owned())
+            .ok_or(AppErrorKind::MissingHostHeader)?;
+
         let session = parts
             .extract::<TowerSession>()
             .await
-            .map_err(AppErrorKind::SessionFetch)?;
+            .map_err(AppErrorKind::CookieFetch)?;
+        let cookie_jar = parts
+            .extract::<Cookies>()
+            .await
+            .map_err(AppErrorKind::CookieFetch)?;
 
         let session_data = if let Some(session_data) = session.get(Session::SESSION_KEY).await? {
             session_data
@@ -96,7 +146,8 @@ where
             // create new session
             tracing::trace!("creating new session");
             let session_data = SessionData {
-                state: random_state(),
+                state: generate_csrf(),
+                csrf: generate_csrf(),
                 identity: None,
             };
             session.insert(Session::SESSION_KEY, &session_data).await?;
@@ -105,7 +156,9 @@ where
 
         Ok(Session {
             session,
+            cookie_jar,
             data: session_data,
+            host,
         })
     }
 }
@@ -198,13 +251,13 @@ impl Distribution<u8> for Base64 {
 }
 
 /// Generates a random state with thread-local entropy.
-pub fn random_state() -> String {
+pub fn generate_csrf() -> String {
     let mut rng = rand::rng();
-    random_state_with(&mut rng)
+    generate_csrf_with(&mut rng)
 }
 
 /// Generates a random state with a provided random generator.
-pub fn random_state_with<R>(rng: &mut R) -> String
+pub fn generate_csrf_with<R>(rng: &mut R) -> String
 where
     R: Rng,
 {

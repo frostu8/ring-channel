@@ -2215,6 +2215,7 @@ dependencies = [
  "time",
  "tokio",
  "tower",
+ "tower-cookies",
  "tower-http",
  "tower-sessions",
  "tower-sessions-moka-store",

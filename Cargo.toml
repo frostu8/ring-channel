@@ -27,8 +27,10 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 serde_repr = { workspace = true }
 uuid = { version = "1", features = ["serde", "v4"] }
 serde_json = "1"
+tower-cookies = { version = "0.11", features = ["private"] }
 tower-sessions = { version = "0.14", default-features = false, features = ["axum-core", "private"] }
 tower-sessions-moka-store = "0.15"
+tower-sessions-sqlx-store = { version = "0.15", features = ["sqlite"] }
 time = "0.3"
 rand = "0.9"
 oauth2 = "5"
@@ -38,8 +40,7 @@ twilight-http = "0.16"
 clap = { version = "4", features = ["derive"] }
 sha2 = "0.10"
 base16 = "0.2"
-tower-sessions-sqlx-store = { version = "0.15.0", features = ["sqlite"] }
-cookie = { version = "0.18.1", features = ["private"] }
+cookie = { version = "0.18", features = ["private"] }
 
 [workspace]
 resolver = "3"

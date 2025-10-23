@@ -38,7 +38,12 @@ pub struct LoginResponse {
 
 /// Redirects a user to the application authorization.
 #[instrument(skip(oauth_state))]
-pub async fn redirect(session: Session, State(oauth_state): State<OauthState>) -> Redirect {
+pub async fn redirect(
+    mut session: Session,
+    State(oauth_state): State<OauthState>,
+) -> Result<Redirect, AppError> {
+    session.shuffle_csrf().await?;
+
     // we now have a session, build the url
     let (auth_url, _csrf_token) = oauth_state
         .client
@@ -46,7 +51,7 @@ pub async fn redirect(session: Session, State(oauth_state): State<OauthState>) -
         .add_scope(Scope::new("identify".into()))
         .url();
 
-    Redirect::to(auth_url.as_str())
+    Ok(Redirect::to(auth_url.as_str()))
 }
 
 /// Processes a complete grant request.
@@ -191,8 +196,7 @@ pub async fn login(
 
     tx.commit().await?;
 
-    // attach user to session
-    session.set_user(user_id).await?;
+    session.set_user(user_id).await?; // attach user to session
 
     if let Some(redirect_url) = oauth_state.redirect_to.as_ref() {
         Ok(Redirect::to(&redirect_url))
