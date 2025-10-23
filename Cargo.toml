@@ -35,8 +35,8 @@ time = "0.3"
 rand = "0.9"
 oauth2 = "5"
 reqwest = "0.12"
-twilight-model = "0.16"
-twilight-http = "0.16"
+twilight-model = { git = "https://github.com/twilight-rs/twilight.git" }
+twilight-http = { git = "https://github.com/twilight-rs/twilight.git" }
 clap = { version = "4", features = ["derive"] }
 sha2 = "0.10"
 base16 = "0.2"

@@ -12,9 +12,13 @@ use oauth2::{
     StandardRevocableToken, TokenResponse as _,
 };
 
+use ring_channel_model::user::to_username_lossy;
+
+use twilight_model::user::CurrentUser as DiscordUser;
+
 use serde::Deserialize;
 
-use sqlx::FromRow;
+use sqlx::{FromRow, SqliteConnection};
 
 use tracing::instrument;
 
@@ -148,42 +152,20 @@ pub async fn login(
 
         existing_user.id
     } else {
-        // user needs to be created
-        let username = if remote_user.discriminator > 0 {
-            // Old, tag-style username
-            format!("{}_{}", remote_user.name, remote_user.discriminator())
-        } else {
-            // New username
-            remote_user.name.clone()
-        };
-
-        let (new_user_id,) = sqlx::query_as::<_, (i32,)>(
-            r#"
-            INSERT INTO user (username, inserted_at, updated_at)
-            VALUES ($1, $2, $2)
-            RETURNING id
-            "#,
-        )
-        .bind(&username)
-        .bind(now)
-        .fetch_one(&mut *tx)
-        .await?;
-
-        tracing::info!(id={new_user_id}, %username, "creating new user");
-
-        new_user_id
+        try_create_user(&remote_user, &mut *tx).await?
     };
 
     // replace discord refresh token
     sqlx::query(
         r#"
         INSERT INTO discord_auth
-            (user_id, discord_id, refresh_token, inserted_at, updated_at)
+            (user_id, discord_id, refresh_token, last_fetched_at, inserted_at, updated_at)
         VALUES
-            ($1, $2, $3, $4, $4)
+            ($1, $2, $3, $4, $4, $4)
         ON CONFLICT (user_id) DO UPDATE
         SET
             refresh_token = $3,
+            last_fetched_at = $4,
             updated_at = $4
         "#,
     )
@@ -214,4 +196,65 @@ pub enum UpdateTokenError {
     MissingRefreshToken,
     #[display("missing expiry time")]
     MissingExpiresIn,
+}
+
+async fn try_create_user(
+    remote_user: &DiscordUser,
+    tx: &mut SqliteConnection,
+) -> Result<i32, AppError> {
+    let now = Utc::now();
+
+    // user needs to be created
+    let username = if remote_user.discriminator > 0 {
+        // Old, tag-style username
+        format!("{}_{}", remote_user.name, remote_user.discriminator())
+    } else {
+        // New username
+        remote_user.name.clone()
+    };
+    let username = to_username_lossy(username);
+
+    let display_name = remote_user
+        .global_name
+        .as_ref()
+        .unwrap_or(&remote_user.name);
+
+    let res = sqlx::query_as::<_, (i32,)>(
+        r#"
+        INSERT INTO user (username, display_name, inserted_at, updated_at)
+        VALUES ($1, $2, $3, $3)
+        RETURNING id
+        "#,
+    )
+    .bind(&username)
+    .bind(display_name)
+    .bind(now)
+    .fetch_one(&mut *tx)
+    .await;
+
+    // check for unique violation
+    match res {
+        Ok((new_user_id,)) => {
+            tracing::info!(id={new_user_id}, %username, "creating new user");
+            Ok(new_user_id)
+        }
+        Err(sqlx::Error::Database(err)) if err.is_unique_violation() => {
+            // create plain user
+            let (new_user_id,) = sqlx::query_as::<_, (i32,)>(
+                r#"
+                INSERT INTO user (username, display_name, inserted_at, updated_at)
+                VALUES (NULL, $1, $2, $2)
+                RETURNING id
+                "#,
+            )
+            .bind(display_name)
+            .bind(now)
+            .fetch_one(&mut *tx)
+            .await?;
+
+            tracing::info!(id = { new_user_id }, "creating new user w/ null username");
+            Ok(new_user_id)
+        }
+        Err(err) => Err(err.into()),
+    }
 }

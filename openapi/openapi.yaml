@@ -125,11 +125,38 @@ components:
       type: object
       required:
         - username
+        - display_name
         - mobiums
       properties:
         username:
           type: string
           description: The user's unique username.
+        display_name:
+          type: string
+          description: The user's display name.
+        mobiums:
+          type: integer
+          description: How many mobiums the user currently has.
+          format: int64
+    CurrentUser:
+      type: object
+      required:
+        - username
+        - display_name
+        - mobiums
+      properties:
+        username:
+          type: string
+          description: >
+            The user's unique username.
+
+            May be null if the generated username for the user conflicted, or
+            failed some other constraints. In this case, you need to manually
+            set your username.
+          nullable: true
+        display_name:
+          type: string
+          description: The user's display name.
         mobiums:
           type: integer
           description: How many mobiums the user currently has.
@@ -229,6 +256,7 @@ components:
     userExample:
       value:
         username: frostu8
+        display_name: Ring Racer
         mobiums: 143
     apiKeyUnauthenticatedExample:
       value:
@@ -581,7 +609,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/User"
+                $ref: "#/components/schemas/CurrentUser"
               examples:
                 userExample:
                   $ref: "#/components/examples/userExample"

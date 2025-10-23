@@ -1,7 +1,11 @@
 -- A list of users on the duelchannel
 CREATE TABLE user (
     id INTEGER PRIMARY KEY,
-    username VARCHAR(255) NOT NULL UNIQUE,
+    -- Usernames may be null if the user's username is lossily converted into
+    -- one that already exists
+    username VARCHAR(255) UNIQUE,
+    -- Always valid
+    display_name VARCHAR(255) NOT NULL,
     -- The monoys
     mobiums BIGINT NOT NULL DEFAULT 400,
     inserted_at TIMESTAMP NOT NULL,
@@ -14,6 +18,7 @@ CREATE TABLE discord_auth (
     user_id INTEGER NOT NULL UNIQUE REFERENCES user(id),
     discord_id BIGINT NOT NULL UNIQUE,
     refresh_token VARCHAR(255) NOT NULL,
+    last_fetched_at TIMESTAMP NOT NULL,
     inserted_at TIMESTAMP NOT NULL,
     updated_at TIMESTAMP NOT NULL
 );
