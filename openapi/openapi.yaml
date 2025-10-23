@@ -20,6 +20,8 @@ tags:
     description: Match-related operations.
   - name: player
     description: Endpoints that operate only on players.
+  - name: user
+    description: Humans that access the application.
 
 components:
   securitySchemes:
@@ -27,6 +29,10 @@ components:
       type: apiKey
       in: header
       name: X-API-KEY
+    cookie:
+      type: apiKey
+      in: cookie
+      name: id
   schemas:
     Player:
       type: object
@@ -115,6 +121,19 @@ components:
           type: string
           description: The time when the bets close.
           format: date-time
+    User:
+      type: object
+      required:
+        - username
+        - mobiums
+      properties:
+        username:
+          type: string
+          description: The user's unique username.
+        mobiums:
+          type: integer
+          description: How many mobiums the user currently has.
+          format: int64
     CreateMatch:
       type: object
       required:
@@ -207,7 +226,11 @@ components:
       value:
         id: 4ZWBU0
         display_name: Tails
-    unauthenticatedErrorExample:
+    userExample:
+      value:
+        username: frostu8
+        mobiums: 143
+    apiKeyUnauthenticatedExample:
       value:
         message: No API key passed; set an X-API-Key header!
 
@@ -279,8 +302,8 @@ paths:
               schema:
                 $ref: "#/components/schemas/Error"
               examples:
-                unauthenticatedErrorExample:
-                  $ref: "#/components/examples/unauthenticatedErrorExample"
+                apiKeyUnauthenticatedExample:
+                  $ref: "#/components/examples/apiKeyUnauthenticatedExample"
   /matches/{match_id}:
     get:
       tags:
@@ -373,8 +396,8 @@ paths:
               schema:
                 $ref: "#/components/schemas/Error"
               examples:
-                unauthenticatedErrorExample:
-                  $ref: "#/components/examples/unauthenticatedErrorExample"
+                apiKeyUnauthenticatedExample:
+                  $ref: "#/components/examples/apiKeyUnauthenticatedExample"
         "404":
           description: >
             Requested match does not exist.
@@ -452,8 +475,8 @@ paths:
               schema:
                 $ref: "#/components/schemas/Error"
               examples:
-                unauthenticatedErrorExample:
-                  $ref: "#/components/examples/unauthenticatedErrorExample"
+                apiKeyUnauthenticatedExample:
+                  $ref: "#/components/examples/apiKeyUnauthenticatedExample"
         "404":
           description: >
             The match does not exist, the player does not exist, or the player
@@ -539,5 +562,32 @@ paths:
               schema:
                 $ref: "#/components/schemas/Error"
               examples:
-                unauthenticatedErrorExample:
-                  $ref: "#/components/examples/unauthenticatedErrorExample"
+                apiKeyUnauthenticatedExample:
+                  $ref: "#/components/examples/apiKeyUnauthenticatedExample"
+  /users/~me:
+    get:
+      tags:
+        - user
+      summary: Fetch Current User
+      description: >
+        Displays information about the user currently authenticated by this
+        session.
+      security:
+        - cookie: []
+      operationId: fetch_current_user
+      responses:
+        "200":
+          description: The currently logged-in user.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+              examples:
+                userExample:
+                  $ref: "#/components/examples/userExample"
+        "401":
+          description: User is unauthenticated.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"

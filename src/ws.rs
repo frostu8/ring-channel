@@ -10,7 +10,7 @@ use tracing::instrument;
 
 use crate::{
     app::{AppError, error::AppErrorKind},
-    auth::AuthenticatedUser,
+    session::SessionUser,
 };
 
 /// The WebSocket state.
@@ -40,7 +40,7 @@ impl Room {
     pub fn serve(
         &self,
         ws: WebSocket,
-        user: Option<AuthenticatedUser>,
+        user: Option<SessionUser>,
     ) -> impl Future<Output = ()> + Send + 'static + use<> {
         serve(WebSocketState {
             ws,
@@ -68,7 +68,7 @@ pub struct Handle {
 struct WebSocketState {
     ws: WebSocket,
     handle: Handle,
-    user: Option<AuthenticatedUser>,
+    user: Option<SessionUser>,
     closed: bool,
 }
 

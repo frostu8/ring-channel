@@ -36,9 +36,10 @@ use tower_http::{
     trace::TraceLayer,
 };
 
-use tower_sessions::{Expiry, SessionManagerLayer, cookie::SameSite};
+use tower_sessions::{CachingSessionStore, Expiry, SessionManagerLayer, cookie::SameSite};
 use tower_sessions_moka_store::MokaStore;
 
+use tower_sessions_sqlx_store::SqliteStore;
 use tracing_subscriber::{
     filter::{EnvFilter, LevelFilter},
     fmt,
@@ -63,7 +64,7 @@ async fn main() -> Result<(), Error> {
 
     let config_path = match cli.config {
         Some(path) => path,
-        None => PathBuf::from("config_toml"),
+        None => PathBuf::from("config.toml"),
     };
 
     // Read config file
@@ -106,14 +107,6 @@ async fn main() -> Result<(), Error> {
         room: Arc::new(ws::Room::new()),
     };
 
-    // Create session management for oauth flows
-    let session_store = MokaStore::new(Some(2_000));
-    let session_layer = SessionManagerLayer::new(session_store)
-        .with_name("sid")
-        .with_expiry(Expiry::OnInactivity(Duration::minutes(30)))
-        .with_same_site(SameSite::Lax)
-        .with_secure(config.server.secure_sessions);
-
     // Build routes
     let mut router = Router::<AppState>::new()
         //.route("/ws", get(routes::ws::handler))
@@ -136,6 +129,10 @@ async fn main() -> Result<(), Error> {
                         .route("/wagers", post(routes::battle::wager::create)),
                 ),
         )
+        .nest(
+            "/users",
+            Router::<AppState>::new().route("/~me", get(routes::user::show_me)),
+        )
         // serve openapi spec
         .route("/openapi.yaml", get(serve_openapi))
         .with_state(state);
@@ -144,14 +141,12 @@ async fn main() -> Result<(), Error> {
         let oauth_state = OauthState::new(&config.server.base_url, db.clone(), &discord_config)?
             .with_redirect_to(config.server.redirect_url.clone());
 
-        router = router.nest(
-            "/auth",
-            Router::<OauthState>::new()
-                .route("/redirect", get(routes::auth::redirect))
-                .route("/token", get(routes::auth::token))
-                .with_state(oauth_state)
-                .layer(session_layer),
-        );
+        let oauth_router = Router::<OauthState>::new()
+            .route("/users/~redirect", get(routes::user::auth::redirect))
+            .route("/users/~login", get(routes::user::auth::login))
+            .with_state(oauth_state);
+
+        router = router.merge(oauth_router);
 
         tracing::info!(
             client_id = { discord_config.client_id },
@@ -159,8 +154,25 @@ async fn main() -> Result<(), Error> {
         );
     }
 
+    // Create session management
+    let db_session_store = SqliteStore::new(db.clone())
+        .with_table_name("_session")
+        .map_err(Error::msg)?;
+    db_session_store.migrate().await?;
+
+    let caching_session_store = MokaStore::new(Some(2_000));
+
+    let session_store = CachingSessionStore::new(caching_session_store, db_session_store);
+    let session_layer = SessionManagerLayer::new(session_store)
+        .with_name("id")
+        .with_expiry(Expiry::OnInactivity(Duration::days(30)))
+        .with_http_only(true)
+        .with_same_site(SameSite::Lax)
+        .with_secure(config.server.secure_sessions);
+
     // Finalize router
     let router = router
+        .layer(session_layer)
         .layer(
             CorsLayer::new()
                 .allow_methods([Method::GET])

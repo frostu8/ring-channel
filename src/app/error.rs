@@ -138,16 +138,28 @@ impl AppError {
                     message: "Missing request content type".into(),
                 },
             ),
-            AppErrorKind::Unauthenticated => (
+            AppErrorKind::ApiKeyUnauthenticated => (
                 StatusCode::UNAUTHORIZED,
                 ApiError {
                     message: "No API key passed; set an X-API-Key header!".into(),
                 },
             ),
-            AppErrorKind::BadCredentials => (
+            AppErrorKind::ApiKeyBadCredentials => (
                 StatusCode::UNAUTHORIZED,
                 ApiError {
                     message: "API key was malformed".into(),
+                },
+            ),
+            AppErrorKind::UserUnauthenticated => (
+                StatusCode::UNAUTHORIZED,
+                ApiError {
+                    message: "User is unauthenticated".into(),
+                },
+            ),
+            AppErrorKind::InvalidSession => (
+                StatusCode::UNAUTHORIZED,
+                ApiError {
+                    message: "Session is invalid or bad; perhaps this is an old cookie?".into(),
                 },
             ),
             AppErrorKind::InvalidState { .. } => (
@@ -245,13 +257,20 @@ pub enum AppErrorKind {
     /// The server cannot serve this content type.
     #[from(ignore)]
     UnsupportedContentType(String),
-    /// The client attempted to access a protected endpoint without
-    /// authentication.
-    #[display("No authentication given")]
-    Unauthenticated,
+    /// The client attempted to access a protected endpoint without an api key.
+    #[display("No api key given")]
+    ApiKeyUnauthenticated,
     /// The client presented bad credentials.
-    #[display("Bad credentials given")]
-    BadCredentials,
+    #[display("Bad api key given")]
+    ApiKeyBadCredentials,
+    /// The client attempted to access a protected endpoint without a valid
+    /// user session.
+    #[display("No authentication given")]
+    UserUnauthenticated,
+    /// The client attempted to access a protected endpoint without a valid
+    /// user session.
+    #[display("Session invalid")]
+    InvalidSession,
     /// An error with the session occured.
     #[display("{} {}: {}", _0.0, _0.0.canonical_reason().unwrap_or("Error"), _0.1)]
     #[from(ignore)]

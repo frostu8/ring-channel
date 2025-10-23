@@ -38,6 +38,7 @@ twilight-http = "0.16"
 clap = { version = "4", features = ["derive"] }
 sha2 = "0.10"
 base16 = "0.2"
+tower-sessions-sqlx-store = { version = "0.15.0", features = ["sqlite"] }
 
 [workspace]
 resolver = "3"

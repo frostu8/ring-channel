@@ -1,4 +1,4 @@
-//! Oauth2 authorization grant flow routes.
+//! User authentication routes.
 
 use axum::{
     extract::{Query, State},
@@ -51,15 +51,15 @@ pub async fn redirect(session: Session, State(oauth_state): State<OauthState>) -
 
 /// Processes a complete grant request.
 #[instrument(skip(oauth_state))]
-pub async fn token(
+pub async fn login(
     Query(query): Query<LoginResponse>,
-    session: Session,
+    mut session: Session,
     State(oauth_state): State<OauthState>,
 ) -> Result<Redirect, AppError> {
     // Check for CSRF
     if session.state != query.state {
         tracing::warn!("suspicious request w/ invalid state: {}", query.state);
-        // NOTE: It doesn't seem right to send API errors on an endpoint
+        // FIXME: It doesn't seem right to send API errors on an endpoint
         // browsers are accessing?
         return Err(AppErrorKind::InvalidState { state: query.state }.into());
     }
@@ -100,7 +100,7 @@ pub async fn token(
     let token = format!("Bearer {access_token}");
     let http_client = twilight_http::Client::builder().token(token).build();
 
-    let user = http_client
+    let remote_user = http_client
         .current_user()
         .await?
         .model()
@@ -122,7 +122,7 @@ pub async fn token(
             AND da.discord_id = $1
         "#,
     )
-    .bind(user.id.get() as i64)
+    .bind(remote_user.id.get() as i64)
     .fetch_optional(&mut *tx)
     .await?;
 
@@ -144,12 +144,12 @@ pub async fn token(
         existing_user.id
     } else {
         // user needs to be created
-        let username = if user.discriminator > 0 {
+        let username = if remote_user.discriminator > 0 {
             // Old, tag-style username
-            format!("{}_{}", user.name, user.discriminator())
+            format!("{}_{}", remote_user.name, remote_user.discriminator())
         } else {
             // New username
-            user.name.clone()
+            remote_user.name.clone()
         };
 
         let (new_user_id,) = sqlx::query_as::<_, (i32,)>(
@@ -183,13 +183,16 @@ pub async fn token(
         "#,
     )
     .bind(user_id)
-    .bind(user.id.get() as i64)
+    .bind(remote_user.id.get() as i64)
     .bind(&refresh_token)
     .bind(now)
     .execute(&mut *tx)
     .await?;
 
     tx.commit().await?;
+
+    // attach user to session
+    session.set_user(user_id).await?;
 
     if let Some(redirect_url) = oauth_state.redirect_to.as_ref() {
         Ok(Redirect::to(&redirect_url))
