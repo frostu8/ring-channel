@@ -167,7 +167,15 @@ async fn main() -> Result<(), Error> {
             Router::<AppState>::new().route("/~me", get(routes::user::show_me)),
         )
         // serve openapi spec
-        .route("/openapi.yaml", get(serve_openapi))
+        .merge(
+            Router::<AppState>::new()
+                .route("/openapi.yaml", get(serve_openapi))
+                .layer(
+                    CorsLayer::new()
+                        .allow_methods([Method::GET])
+                        .allow_origin(Any),
+                ),
+        )
         .with_state(state);
 
     if let Some(discord_config) = config.discord.as_ref() {
@@ -207,11 +215,6 @@ async fn main() -> Result<(), Error> {
     // Finalize router
     let router = router
         .layer(session_layer)
-        .layer(
-            CorsLayer::new()
-                .allow_methods([Method::GET])
-                .allow_origin(Any),
-        )
         .layer(
             TraceLayer::new_for_http()
                 .make_span_with(|req: &Request| {
