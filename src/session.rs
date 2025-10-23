@@ -22,7 +22,7 @@ use std::{
     fmt::{self, Debug, Formatter},
 };
 
-use http::{header, request::Parts};
+use http::request::Parts;
 
 use rand::{Rng, distr::Distribution};
 
@@ -47,7 +47,6 @@ pub struct Session {
     cookie_jar: Cookies,
     #[deref]
     data: SessionData,
-    host: String,
 }
 
 /// Inner session data.
@@ -95,7 +94,6 @@ impl Session {
         csrf_cookie.set_same_site(SameSite::Strict);
         csrf_cookie.set_expires(one_year);
         csrf_cookie.set_path("/");
-        csrf_cookie.set_domain(Cow::Owned(self.host.clone()));
 
         self.cookie_jar.add(csrf_cookie);
 
@@ -123,14 +121,6 @@ where
     type Rejection = AppError;
 
     async fn from_request_parts(parts: &mut Parts, _state: &S) -> Result<Self, Self::Rejection> {
-        // get hostname
-        let host = parts
-            .headers
-            .get(header::HOST)
-            .and_then(|h| h.to_str().ok())
-            .map(|s| s.to_owned())
-            .ok_or(AppErrorKind::MissingHostHeader)?;
-
         let session = parts
             .extract::<TowerSession>()
             .await
@@ -158,7 +148,6 @@ where
             session,
             cookie_jar,
             data: session_data,
-            host,
         })
     }
 }
