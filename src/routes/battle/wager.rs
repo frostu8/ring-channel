@@ -35,6 +35,7 @@ pub async fn show_self(
         updated_at: DateTime<Utc>,
         // user structs
         username: String,
+        avatar: Option<String>,
         display_name: String,
         user_mobiums: i64,
     }
@@ -46,7 +47,7 @@ pub async fn show_self(
         r#"
         SELECT
             w.victor, w.mobiums, w.updated_at,
-            u.username, u.display_name, u.mobiums AS user_mobiums
+            u.username, u.display_name, u.avatar, u.mobiums AS user_mobiums
         FROM
             wager w, user u
         WHERE
@@ -68,6 +69,7 @@ pub async fn show_self(
     Ok(AppJson(BattleWager {
         user: Some(User {
             username: query.username,
+            avatar: query.avatar,
             display_name: query.display_name,
             mobiums: query.user_mobiums,
         }),
@@ -92,6 +94,7 @@ pub async fn show(
         updated_at: DateTime<Utc>,
         // user structs
         username: String,
+        avatar: Option<String>,
         display_name: String,
         user_mobiums: i64,
     }
@@ -103,7 +106,7 @@ pub async fn show(
         r#"
         SELECT
             w.victor, w.mobiums, w.updated_at,
-            u.username, u.display_name, u.mobiums AS user_mobiums
+            u.username, u.display_name, u.avatar, u.mobiums AS user_mobiums
         FROM
             wager w, user u
         WHERE
@@ -124,6 +127,7 @@ pub async fn show(
     Ok(AppJson(BattleWager {
         user: Some(User {
             username: query.username,
+            avatar: query.avatar,
             display_name: query.display_name,
             mobiums: query.user_mobiums,
         }),
@@ -233,6 +237,7 @@ pub async fn create_self(
     let wager = BattleWager {
         user: Some(User {
             username: user.username.clone(),
+            avatar: user.avatar.clone(),
             display_name: user.display_name.clone(),
             mobiums: user.mobiums,
         }),

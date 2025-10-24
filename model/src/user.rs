@@ -12,6 +12,8 @@ pub struct CurrentUser {
     /// If this is `None`, the user may have to set their username before they
     /// can play or access endpoints.
     pub username: Option<String>,
+    /// The URL of the user's avatar.
+    pub avatar: Option<String>,
     /// The display name of the user.
     pub display_name: String,
     /// How many mobiums they have.
@@ -23,6 +25,8 @@ pub struct CurrentUser {
 pub struct User {
     /// The unique username of the user.
     pub username: String,
+    /// The URL of the user's avatar.
+    pub avatar: Option<String>,
     /// The display name of the user.
     pub display_name: String,
     /// How many mobiums they have.

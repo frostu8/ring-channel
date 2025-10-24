@@ -6,6 +6,8 @@ CREATE TABLE user (
     username VARCHAR(255) UNIQUE,
     -- Always valid
     display_name VARCHAR(255) NOT NULL,
+    -- May be null if the user doesn't have an avatar
+    avatar VARCHAR(255),
     -- The monoys
     mobiums BIGINT NOT NULL DEFAULT 400,
     -- How many times this user has been bailed out

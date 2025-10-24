@@ -189,6 +189,7 @@ where
         #[derive(FromRow)]
         struct UserQuery {
             username: String,
+            avatar: Option<String>,
             display_name: String,
             mobiums: i64,
         }
@@ -201,7 +202,7 @@ where
             // fetch identity
             let user = sqlx::query_as::<_, UserQuery>(
                 r#"
-                SELECT username, display_name, mobiums
+                SELECT username, avatar, display_name, mobiums
                 FROM user
                 WHERE id = $1 AND username IS NOT NULL
                 "#,
@@ -214,6 +215,7 @@ where
                 Ok(SessionUser {
                     user: User {
                         username: user.username,
+                        avatar: user.avatar,
                         display_name: user.display_name,
                         mobiums: user.mobiums,
                     },

@@ -19,6 +19,7 @@ pub async fn show_me(
     #[derive(FromRow)]
     struct MaybeUserQuery {
         username: Option<String>,
+        avatar: Option<String>,
         display_name: String,
         mobiums: i64,
     }
@@ -27,7 +28,7 @@ pub async fn show_me(
         // fetch identity
         let user = sqlx::query_as::<_, MaybeUserQuery>(
             r#"
-            SELECT username, display_name, mobiums
+            SELECT username, avatar, display_name, mobiums
             FROM user
             WHERE id = $1
             "#,
@@ -39,6 +40,7 @@ pub async fn show_me(
         if let Some(user) = user {
             Ok(AppJson(CurrentUser {
                 username: user.username,
+                avatar: user.avatar,
                 display_name: user.display_name,
                 mobiums: user.mobiums,
             }))

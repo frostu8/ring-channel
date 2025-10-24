@@ -219,15 +219,23 @@ async fn try_create_user(
         .as_ref()
         .unwrap_or(&remote_user.name);
 
+    let avatar_url = remote_user.avatar.map(|avatar_hash| {
+        format!(
+            "https://cdn.discordapp.com/avatars/{}/{}.png",
+            remote_user.id, avatar_hash
+        )
+    });
+
     let res = sqlx::query_as::<_, (i32,)>(
         r#"
-        INSERT INTO user (username, display_name, inserted_at, updated_at)
-        VALUES ($1, $2, $3, $3)
+        INSERT INTO user (username, display_name, avatar, inserted_at, updated_at)
+        VALUES ($1, $2, $3, $4, $4)
         RETURNING id
         "#,
     )
     .bind(&username)
     .bind(display_name)
+    .bind(avatar_url)
     .bind(now)
     .fetch_one(&mut *tx)
     .await;
