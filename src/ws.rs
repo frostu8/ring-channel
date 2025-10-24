@@ -18,20 +18,28 @@ use crate::{
 /// This serves as a master object that can lease handles to new websockets.
 #[derive(Debug)]
 pub struct Room {
-    tx: Sender<ApiMessage>,
+    tx: Sender<Event>,
 }
 
 impl Room {
     /// Creates a new `Room`.
     pub fn new() -> Room {
-        let (tx, _rx) = broadcast::channel(8);
+        let (tx, _rx) = broadcast::channel(16);
 
         Room { tx }
     }
 
     /// Broadcasts an event to the room.
     pub fn broadcast(&self, message: ApiMessage) {
-        let _ = self.tx.send(message);
+        let _ = self.tx.send(message.into());
+    }
+
+    /// Sends an event to a particular user, if they are connected
+    pub fn send_to(&self, user_id: i32, message: ApiMessage) {
+        let _ = self.tx.send(Event {
+            message,
+            recipient: Some(user_id),
+        });
     }
 
     /// Serves a new client, with additional authentication information.
@@ -61,7 +69,23 @@ impl Room {
 #[derive(Debug)]
 pub struct Handle {
     /// Events produced by the room.
-    pub rx: Receiver<ApiMessage>,
+    pub rx: Receiver<Event>,
+}
+
+/// A container for a message.
+#[derive(Debug, Clone)]
+pub struct Event {
+    message: ApiMessage,
+    recipient: Option<i32>,
+}
+
+impl From<ApiMessage> for Event {
+    fn from(value: ApiMessage) -> Self {
+        Event {
+            message: value,
+            recipient: None,
+        }
+    }
 }
 
 #[allow(dead_code)]
@@ -164,8 +188,15 @@ async fn handle_message(state: &mut WebSocketState, message: Message) -> Result<
 
 /// Handles an internal server event.
 #[instrument(skip(state))]
-async fn handle_server_event(state: &mut WebSocketState, msg: ApiMessage) -> Result<(), AppError> {
-    let text = serde_json::to_string(&msg).expect("valid json");
+async fn handle_server_event(state: &mut WebSocketState, msg: Event) -> Result<(), AppError> {
+    // check if this message is for our client
+    if msg.recipient.is_some() {
+        if msg.recipient != state.user.as_ref().map(|u| u.identity()) {
+            return Ok(());
+        }
+    }
+
+    let text = serde_json::to_string(&msg.message).expect("valid json");
     state
         .ws
         .send(Message::Text(text.into()))

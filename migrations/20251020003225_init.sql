@@ -8,6 +8,8 @@ CREATE TABLE user (
     display_name VARCHAR(255) NOT NULL,
     -- The monoys
     mobiums BIGINT NOT NULL DEFAULT 400,
+    -- How many times this user has been bailed out
+    bailout_count INTEGER NOT NULL DEFAULT 0,
     inserted_at TIMESTAMP NOT NULL,
     updated_at TIMESTAMP NOT NULL
 );

@@ -142,7 +142,7 @@ async fn main() -> Result<(), Error> {
 
     // Build routes
     let mut api_routes = Router::<AppState>::new()
-        //.route("/ws", get(routes::ws::handler))
+        .route("/gateway", get(routes::ws::handler))
         .nest(
             "/players",
             Router::<AppState>::new()

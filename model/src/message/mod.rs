@@ -4,7 +4,7 @@ use derive_more::From;
 
 use serde::{Deserialize, Serialize};
 
-use crate::message::server::{BattleConcluded, NewBattle};
+use crate::message::server::{BattleConcluded, MobiumsChange, NewBattle};
 
 pub mod server;
 
@@ -18,4 +18,8 @@ pub enum Message {
     NewBattle(NewBattle),
     /// A server notification for a concluded match.
     BattleConcluded(BattleConcluded),
+    /// A server notification for mobiums change on your acc.
+    ///
+    /// This is most of the time because a wager resolved
+    MobiumsChange(MobiumsChange),
 }

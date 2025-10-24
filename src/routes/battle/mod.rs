@@ -25,6 +25,7 @@ use uuid::Uuid;
 use crate::{
     app::{AppError, AppJson, AppState, Payload, error::AppErrorKind},
     auth::api_key::ServerAuthentication,
+    battle::calculate_winnings,
 };
 
 /// Shows an existing match.
@@ -204,7 +205,7 @@ pub async fn update(
 
     let mut tx = state.db.begin().await?;
 
-    let battle = sqlx::query_as::<_, BattleQuery>(
+    let battle_query = sqlx::query_as::<_, BattleQuery>(
         r#"
         SELECT
             id, level_name, status, closed_at
@@ -218,13 +219,16 @@ pub async fn update(
     .fetch_optional(&mut *tx)
     .await?;
 
-    let Some(mut battle) = battle else {
+    let Some(mut battle_query) = battle_query else {
         return Err(AppError::not_found(format!("Match {} not found", uuid)));
     };
 
     // Verify changes
-    let is_status_changed = request.status.map(|s| s != battle.status).unwrap_or(false);
-    if battle.status != BattleStatus::Ongoing {
+    let is_status_changed = request
+        .status
+        .map(|s| s != battle_query.status)
+        .unwrap_or(false);
+    if battle_query.status != BattleStatus::Ongoing {
         return Err(AppErrorKind::AlreadyConcluded(uuid).into());
     }
 
@@ -249,15 +253,15 @@ pub async fn update(
                 AND match_id = $1
             "#,
         )
-        .bind(battle.id)
+        .bind(battle_query.id)
         .execute(&mut *tx)
         .await?;
 
         set_concluded = Some(now);
 
         // if this cancels the betting session, we need to stop accepting bets
-        if now < battle.closed_at {
-            battle.closed_at = now;
+        if now < battle_query.closed_at {
+            battle_query.closed_at = now;
         }
     }
 
@@ -274,24 +278,24 @@ pub async fn update(
             id = $1
         "#,
     )
-    .bind(battle.id)
+    .bind(battle_query.id)
     .bind(request.status.map(|s| u8::from(s)))
-    .bind(battle.closed_at)
+    .bind(battle_query.closed_at)
     .bind(set_concluded)
     .execute(&mut *tx)
     .await?;
 
     // Create battle struct
-    let accepting_bets = now < battle.closed_at;
+    let accepting_bets = now < battle_query.closed_at;
     let mut battle = Battle {
         id: uuid.hyphenated().to_string(),
-        level_name: battle.level_name,
+        level_name: battle_query.level_name,
         // We will preload this in a sec
         participants: vec![],
-        status: request.status.unwrap_or(battle.status),
+        status: request.status.unwrap_or(battle_query.status),
         accepting_bets,
         closes_at: if accepting_bets {
-            Some(battle.closed_at)
+            Some(battle_query.closed_at)
         } else {
             None
         },
@@ -299,12 +303,17 @@ pub async fn update(
 
     preload_participants(&mut battle, &mut *tx).await?;
 
-    tx.commit().await?;
-
     // Update websocket listeners
     if set_concluded.is_some() {
         state.room.broadcast(BattleConcluded(battle.clone()).into());
     }
+
+    if request.status == Some(BattleStatus::Concluded) {
+        // close the match!
+        calculate_winnings(battle_query.id, &state.room, &mut *tx).await?;
+    }
+
+    tx.commit().await?;
 
     Ok(AppJson(battle))
 }
