@@ -20,7 +20,7 @@ use serde::de::DeserializeOwned;
 
 use sqlx::SqlitePool;
 
-use crate::{app::error::AppErrorKind, ws};
+use crate::{app::error::AppErrorKind, room};
 
 /// Shared app state.
 ///
@@ -30,7 +30,7 @@ pub struct AppState {
     /// The database connection pool.
     pub db: SqlitePool,
     /// The WebSocket room.
-    pub room: Arc<ws::Room>,
+    pub room: Arc<room::Room>,
 }
 
 /// Selective body extractor.

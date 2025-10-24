@@ -22,7 +22,7 @@ use ring_channel::{
     auth::oauth2::OauthState,
     cli::{Args, Command, register_server},
     config::read_config,
-    routes, ws,
+    routes, room,
 };
 
 use anyhow::Error;
@@ -137,7 +137,7 @@ async fn main() -> Result<(), Error> {
     // Create app state
     let state = AppState {
         db: db.clone(),
-        room: Arc::new(ws::Room::new()),
+        room: Arc::new(room::Room::new()),
     };
 
     // Build routes

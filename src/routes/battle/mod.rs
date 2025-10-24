@@ -10,7 +10,6 @@ use chrono::{DateTime, TimeDelta, Utc};
 use ring_channel_model::{
     Player,
     battle::{Battle, BattleStatus, Participant, PlayerTeam},
-    message::server::{BattleConcluded, NewBattle},
     request::battle::{CreateBattleRequest, UpdateBattleRequest},
 };
 
@@ -179,7 +178,7 @@ pub async fn create(
     };
 
     // Send the notice of the new battle to all connected clients
-    state.room.broadcast(NewBattle(battle.clone()).into());
+    state.room.update_battle(battle.clone());
 
     Ok((StatusCode::CREATED, AppJson(battle)))
 }
@@ -304,9 +303,7 @@ pub async fn update(
     preload_participants(&mut battle, &mut *tx).await?;
 
     // Update websocket listeners
-    if set_concluded.is_some() {
-        state.room.broadcast(BattleConcluded(battle.clone()).into());
-    }
+    state.room.update_battle(battle.clone());
 
     if request.status == Some(BattleStatus::Concluded) {
         // close the match!

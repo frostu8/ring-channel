@@ -10,7 +10,7 @@ pub struct NewBattle(pub Battle);
 
 /// A notification that a match has closed.
 #[derive(Clone, Debug, Deserialize, Serialize)]
-pub struct BattleConcluded(pub Battle);
+pub struct BattleUpdate(pub Battle);
 
 /// A notification of a mobiums change.
 #[derive(Clone, Debug, Deserialize, Serialize)]

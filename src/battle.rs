@@ -1,13 +1,10 @@
 //! Battle functions and utilities.
 
-use ring_channel_model::{
-    battle::PlayerTeam,
-    message::{Message, server::MobiumsChange},
-};
+use ring_channel_model::{battle::PlayerTeam, message::server::MobiumsChange};
 
 use sqlx::{FromRow, SqliteConnection};
 
-use crate::{app::AppError, ws::Room};
+use crate::{app::AppError, room::Room};
 
 /// Closes a match, divying up the pots in each.
 pub async fn calculate_winnings(
@@ -123,12 +120,12 @@ pub async fn calculate_winnings(
         .await?;
 
         // Send mobiums change to player
-        room.send_to(
+        room.send_mobiums_change(
             wager.user_id,
-            Message::MobiumsChange(MobiumsChange {
+            MobiumsChange {
                 mobiums: new_mobiums,
                 bailout,
-            }),
+            },
         );
     }
 

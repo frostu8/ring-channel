@@ -41,6 +41,8 @@ clap = { version = "4", features = ["derive"] }
 sha2 = "0.10"
 base16 = "0.2"
 cookie = { version = "0.18", features = ["private"] }
+pin-project = "1"
+futures-core = "0.3"
 
 [workspace]
 resolver = "3"
