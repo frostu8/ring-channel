@@ -230,7 +230,7 @@ pub async fn create_self(
     // shuffle csrf after the action is done
     session.shuffle_csrf().await?;
 
-    Ok(AppJson(BattleWager {
+    let wager = BattleWager {
         user: Some(User {
             username: user.username.clone(),
             display_name: user.display_name.clone(),
@@ -239,5 +239,10 @@ pub async fn create_self(
         victor: update_wager.victor,
         mobiums: update_wager.mobiums,
         updated_at: now,
-    }))
+    };
+
+    // update clients
+    state.room.send_wager_update(wager.clone());
+
+    Ok(AppJson(wager))
 }

@@ -15,8 +15,8 @@ use chrono::Utc;
 use futures_util::SinkExt as _;
 
 use ring_channel_model::{
-    Battle,
-    message::server::{BattleUpdate, MobiumsChange, NewBattle},
+    Battle, BattleWager,
+    message::server::{BattleUpdate, MobiumsChange, NewBattle, WagerUpdate},
 };
 
 use tokio::sync::{
@@ -64,6 +64,11 @@ impl Room {
             .state
             .tx
             .send(RoomEvent::UpdateBattle { battle: new_battle });
+    }
+
+    /// Updates users with a wager change.
+    pub fn send_wager_update(&self, wager: BattleWager) {
+        let _ = self.state.tx.send(RoomEvent::WagerUpdate { wager });
     }
 
     /// Notifies a connected client of mobiums loss (or gain).
@@ -120,6 +125,9 @@ pub struct Handle {
 enum RoomEvent {
     UpdateBattle {
         battle: Battle,
+    },
+    WagerUpdate {
+        wager: BattleWager,
     },
     MobiumsChange {
         user_id: i32,
@@ -210,13 +218,16 @@ async fn handle_server_event(state: &mut WebSocketState, ev: RoomEvent) -> Resul
 
             // A new match was started, or updated
             // Check if the match we have is the same
-            if old_battle.as_ref().map(|b| &b.id) == Some(&battle.id) {
+            if old_battle.as_ref().map(|b| &b.id) != Some(&battle.id) {
                 // This is a new battle!
                 state.ws.send(&NewBattle(battle).into()).await?;
             } else {
                 // This is the same battle, it just got updated
                 state.ws.send(&BattleUpdate(battle).into()).await?;
             }
+        }
+        RoomEvent::WagerUpdate { wager } => {
+            state.ws.send(&WagerUpdate(wager).into()).await?;
         }
         RoomEvent::MobiumsChange { user_id, message }
             if Some(user_id) == state.user.as_ref().map(|u| u.identity()) =>
