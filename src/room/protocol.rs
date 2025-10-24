@@ -143,9 +143,14 @@ impl Stream for WebSocket {
                         code: 1001,
                         reason: reason.into(),
                     };
-                    this.inner.start_send(ws::Message::Close(Some(frame)))?;
-                    self.close_stage = CloseStage::Flushing;
-                    self.closed = true;
+                    *this.closed = true;
+                    if let Err(_err) = this.inner.start_send(ws::Message::Close(Some(frame))) {
+                        // ignore any send after closing errors
+                        self.close_stage = CloseStage::Closed;
+                        return Poll::Ready(None);
+                    } else {
+                        self.close_stage = CloseStage::Flushing;
+                    }
                 }
                 // ping and pong unused
                 Some(Ok(_)) => (),
