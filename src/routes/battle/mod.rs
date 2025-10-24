@@ -178,7 +178,7 @@ pub async fn create(
     };
 
     // Send the notice of the new battle to all connected clients
-    state.room.update_battle(battle.clone());
+    state.room.update_battle(battle.clone()).await;
 
     Ok((StatusCode::CREATED, AppJson(battle)))
 }
@@ -303,7 +303,7 @@ pub async fn update(
     preload_participants(&mut battle, &mut *tx).await?;
 
     // Update websocket listeners
-    state.room.update_battle(battle.clone());
+    state.room.update_battle(battle.clone()).await;
 
     if request.status == Some(BattleStatus::Concluded) {
         // close the match!

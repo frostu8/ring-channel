@@ -2,8 +2,6 @@
 
 pub mod error;
 
-use std::sync::Arc;
-
 pub use error::AppError;
 
 use axum::{
@@ -30,7 +28,7 @@ pub struct AppState {
     /// The database connection pool.
     pub db: SqlitePool,
     /// The WebSocket room.
-    pub room: Arc<room::Room>,
+    pub room: room::Room,
 }
 
 /// Selective body extractor.

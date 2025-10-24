@@ -8,6 +8,10 @@ pub mod protocol;
 pub use protocol::{Error, WebSocket};
 pub use ring_channel_model::message::Message;
 
+use std::sync::Arc;
+
+use chrono::Utc;
+
 use futures_util::SinkExt as _;
 
 use ring_channel_model::{
@@ -15,7 +19,10 @@ use ring_channel_model::{
     message::server::{BattleUpdate, MobiumsChange, NewBattle},
 };
 
-use tokio::sync::broadcast::{self, Receiver, Sender, error::RecvError};
+use tokio::sync::{
+    RwLock,
+    broadcast::{self, Receiver, Sender, error::RecvError},
+};
 
 use tracing::instrument;
 
@@ -23,10 +30,18 @@ use crate::session::SessionUser;
 
 /// An open room.
 ///
+/// Cheaply cloneable.
+///
 /// This serves as a master object that can lease handles to new websockets.
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct Room {
+    state: Arc<RoomState>,
+}
+
+#[derive(Debug)]
+struct RoomState {
     tx: Sender<RoomEvent>,
+    current_battle: RwLock<Option<Battle>>,
 }
 
 impl Room {
@@ -34,17 +49,26 @@ impl Room {
     pub fn new() -> Room {
         let (tx, _rx) = broadcast::channel(16);
 
-        Room { tx }
+        Room {
+            state: Arc::new(RoomState {
+                tx,
+                current_battle: RwLock::default(),
+            }),
+        }
     }
 
     /// Sets a new match for the room, broadcasting it to all clients.
-    pub fn update_battle(&self, new_battle: Battle) {
-        let _ = self.tx.send(RoomEvent::UpdateBattle { battle: new_battle });
+    pub async fn update_battle(&self, new_battle: Battle) {
+        *self.state.current_battle.write().await = Some(new_battle.clone());
+        let _ = self
+            .state
+            .tx
+            .send(RoomEvent::UpdateBattle { battle: new_battle });
     }
 
     /// Notifies a connected client of mobiums loss (or gain).
     pub fn send_mobiums_change(&self, user_id: i32, change: MobiumsChange) {
-        let _ = self.tx.send(RoomEvent::MobiumsChange {
+        let _ = self.state.tx.send(RoomEvent::MobiumsChange {
             user_id,
             message: change,
         });
@@ -53,22 +77,35 @@ impl Room {
     /// Serves a new client, with additional authentication information.
     ///
     /// **This commandeers the calling task!**
-    pub fn serve(
-        &self,
-        ws: axum::extract::ws::WebSocket,
-        user: Option<SessionUser>,
-    ) -> impl Future<Output = ()> + Send + 'static + use<> {
+    pub async fn serve(self, ws: axum::extract::ws::WebSocket, user: Option<SessionUser>) {
+        let now = Utc::now();
+
+        let mut battle = self.state.current_battle.read().await.clone();
+        if let Some(battle) = battle.as_mut() {
+            if battle
+                .closes_at
+                .map(|closes_at| closes_at < now)
+                .unwrap_or_default()
+            {
+                battle.accepting_bets = false;
+                battle.closes_at = None;
+            }
+        }
+
+        tracing::debug!(?battle, "serving new client");
+
         serve(WebSocketState {
             ws: ws.into(),
             handle: self.get_handle(),
             user,
-            battle: None,
+            battle,
         })
+        .await;
     }
 
     fn get_handle(&self) -> Handle {
         Handle {
-            rx: self.tx.subscribe(),
+            rx: self.state.tx.subscribe(),
         }
     }
 }
@@ -105,12 +142,17 @@ struct WebSocketState {
 
 /// Serves a websocket.
 async fn serve(mut state: WebSocketState) {
+    // Give client the rundown on what's happening
+    if let Some(battle) = state.battle.as_ref() {
+        let _ = state.ws.send(&NewBattle(battle.clone()).into()).await;
+    }
+
     while !state.ws.is_closed() {
         let WebSocketState { ws, handle, .. } = &mut state;
 
         tokio::select! {
             ev = ws.recv() => {
-                tracing::trace!(?ev, "got event");
+                tracing::trace!(?ev, "got client msg");
                 match ev {
                     Some(Ok(msg)) => {
                         if let Err(err) = handle_message(&mut state, msg).await {
@@ -128,6 +170,7 @@ async fn serve(mut state: WebSocketState) {
                 }
             }
             ev = handle.rx.recv() => {
+                tracing::trace!(?ev, "got server event");
                 match ev {
                     Ok(event) => {
                         if let Err(err) = handle_server_event(&mut state, event).await {
