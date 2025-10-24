@@ -173,7 +173,7 @@ impl SessionUser {
     ///
     /// This is simply a copy of [`SessionData::identity`], but you don't have
     /// to work with an [`Option`].
-    pub fn identity(self) -> i32 {
+    pub fn identity(&self) -> i32 {
         self.identity
     }
 }

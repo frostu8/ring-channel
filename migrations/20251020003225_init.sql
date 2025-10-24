@@ -76,7 +76,7 @@ CREATE TABLE wager (
     -- Who made the bet
     user_id INTEGER NOT NULL REFERENCES user(id),
     -- On what match was the bet made
-    match_id INTEGER NOT NULL REFERENCES match(id),
+    match_id INTEGER NOT NULL REFERENCES battle(id),
     -- The victor of the match
     -- 0 for red, 1 for blue
     victor INTEGER NOT NULL,

@@ -59,3 +59,22 @@ pub struct UpdateBattleRequest {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub status: Option<BattleStatus>,
 }
+
+/// Request to update a wager.
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct UpdateWager {
+    /// The mobiums the user bets.
+    ///
+    /// This can only be between 0 and the mobiums the user has.
+    ///
+    /// If this is 0, this removes the wager.
+    pub mobiums: i64,
+    /// The victor the user is betting on.
+    ///
+    /// If this team wins, they will be paid out.
+    pub victor: PlayerTeam,
+    /// The [CSRF token].
+    ///
+    /// [CSRF token]: crate::session::Session::shuffle_csrf
+    pub csrf: String,
+}

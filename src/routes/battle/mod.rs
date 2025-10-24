@@ -362,3 +362,25 @@ pub async fn preload_participants(
 
     Ok(())
 }
+
+async fn get_battle_id(match_id: Uuid, conn: &mut SqliteConnection) -> Result<i32, AppError> {
+    #[derive(FromRow)]
+    struct BattleQuery {
+        id: i32,
+    }
+
+    let battle = sqlx::query_as::<_, BattleQuery>(
+        r#"
+        SELECT id FROM battle WHERE uuid = $1
+        "#,
+    )
+    .bind(match_id.hyphenated().to_string())
+    .fetch_optional(&mut *conn)
+    .await?;
+
+    let Some(battle) = battle else {
+        return Err(AppError::not_found(format!("Match {} not found", match_id)));
+    };
+
+    Ok(battle.id)
+}

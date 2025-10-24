@@ -12,7 +12,7 @@ use axum::{
     extract::{MatchedPath, Request},
     middleware::{Next, from_fn},
     response::{IntoResponse, Response},
-    routing::{get, patch, post},
+    routing::{get, patch, post, put},
 };
 
 use axum_server::Handle;
@@ -159,7 +159,9 @@ async fn main() -> Result<(), Error> {
                         .route("/", get(routes::battle::show))
                         .route("/", patch(routes::battle::update))
                         .route("/players/{short_id}", patch(routes::battle::player::update))
-                        .route("/wagers", post(routes::battle::wager::create)),
+                        .route("/wagers/~me", get(routes::battle::wager::show_self))
+                        .route("/wagers/{username}", get(routes::battle::wager::show))
+                        .route("/wagers/~me", put(routes::battle::wager::create_self)),
                 ),
         )
         .nest(

@@ -102,15 +102,10 @@ pub struct BattleWager {
     /// The user that made this wager.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub user: Option<User>,
-    /// The match that made this wager.
-    #[serde(default, skip_serializing_if = "Option::is_none", rename = "match")]
-    pub battle: Option<Battle>,
-    /// What team the player is betting to win.
-    pub victor: PlayerTeam,
     /// The wager amount.
     pub mobiums: i64,
-    /// The creation time of the wager.
-    pub created_at: DateTime<Utc>,
-    /// The updated time of the wager.
+    /// What team the player is betting to win.
+    pub victor: PlayerTeam,
+    /// When the wager was last updated at.
     pub updated_at: DateTime<Utc>,
 }

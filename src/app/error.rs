@@ -180,6 +180,19 @@ impl AppError {
                     message: "Missing Host header".into(),
                 },
             ),
+            AppErrorKind::InvalidCsrfToken => (
+                StatusCode::BAD_REQUEST,
+                ApiError {
+                    message: "Invalid csrf token passed".into(),
+                },
+            ),
+            AppErrorKind::NotEnoughMobiums => (
+                StatusCode::BAD_REQUEST,
+                ApiError {
+                    message: "You don't have that kind of money :(".into(),
+                },
+            ),
+            AppErrorKind::InvalidData(message) => (StatusCode::BAD_REQUEST, ApiError { message }),
             // fallthrough for internal server errors not turned into user
             // errors here
             _error_kind => (
@@ -277,6 +290,16 @@ pub enum AppErrorKind {
     /// user session.
     #[display("Session invalid")]
     InvalidSession,
+    /// An invalid csrf token was passed.
+    #[display("Csrf verification failed")]
+    InvalidCsrfToken,
+    /// No mobiums?
+    #[display("Not enough mobiums")]
+    NotEnoughMobiums,
+    /// A valid schema was passed, but the data was otherwise invalid.
+    #[display("{_0}")]
+    #[from(ignore)]
+    InvalidData(String),
     /// An error with the session occured.
     #[display("{} {}: {}", _0.0, _0.0.canonical_reason().unwrap_or("Error"), _0.1)]
     #[from(ignore)]

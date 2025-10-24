@@ -121,6 +121,25 @@ components:
           type: string
           description: The time when the bets close.
           format: date-time
+    Wager:
+      type: object
+      required:
+        - mobiums
+        - victor
+        - updated_at
+      properties:
+        user:
+          $ref: "#/components/schemas/User"
+        mobiums:
+          type: integer
+          description: The amount of mobiums riding on this bet.
+        victor:
+          type: integer
+          description: The team this user is wagering on.
+        updated_at:
+          type: string
+          description: The time when the wager was made or updated.
+          format: date-time
     User:
       type: object
       required:
@@ -201,6 +220,28 @@ components:
         finish_time:
           type: integer
           description: The finish time of the player, in game tics.
+    UpdateWager:
+      type: object
+      required:
+        - mobiums
+        - victor
+        - csrf
+      properties:
+        mobiums:
+          type: integer
+          description: >
+            The amount of mobiums to wager.
+
+            This cannot be higher than the amount of mobiums you have, or lower
+            than 0.
+        victor:
+          type: integer
+          description: >
+            The team number to set your wager on. If this team wins, you win
+            your cut of the pot.
+        csrf:
+          type: string
+          description: A CSRF token issued by the server.
     MatchStatus:
       type: integer
       description: >
@@ -258,6 +299,15 @@ components:
         username: frostu8
         display_name: Ring Racer
         mobiums: 143
+    wagerExample:
+      value:
+        user:
+          username: frostu8
+          display_name: Ring Racer
+          mobiums: 143
+        mobiums: 143
+        victor: 0
+        updated_at: 2025-10-24T05:37:07.578866465Z
     apiKeyUnauthenticatedExample:
       value:
         message: No API key passed; set an X-API-Key header!
@@ -545,6 +595,110 @@ paths:
                   $ref: "#/components/examples/playerExample"
         "404":
           description: The player with that ID does not exist.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /matches/{match_id}/wagers/~me:
+    get:
+      tags:
+        - match
+      summary: Fetch Self Wager
+      description: >
+        Gets the current user's wager on a match.
+      security:
+        - cookie: []
+      operationId: fetch_self_wager
+      parameters:
+        - name: match_id
+          in: path
+          description: Match UUID
+          required: true
+          schema:
+            type: string
+            example: 18e0b086-5557-4245-877d-19729bf6d4bd
+            pattern: '^[\dA-Fa-f]{8}-[\dA-Fa-f]{4}-[\dA-Fa-f]{4}-[\dA-Fa-f]{4}-[\dA-Fa-f]{12}$'
+      responses:
+        "200":
+          description: The wager.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Wager"
+              examples:
+                wagerExample:
+                  $ref: "#/components/examples/wagerExample"
+        "404":
+          description: >
+            The match does not exist, or the user hasn't wagered anything.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+    put:
+      tags:
+        - match
+      summary: Update Self Wager
+      description: >
+        Updates the authenticated user's wager on a match.
+      security:
+        - cookie: []
+      operationId: update_self_wager
+      parameters:
+        - name: match_id
+          in: path
+          description: Match UUID
+          required: true
+          schema:
+            type: string
+            example: 18e0b086-5557-4245-877d-19729bf6d4bd
+            pattern: '^[\dA-Fa-f]{8}-[\dA-Fa-f]{4}-[\dA-Fa-f]{4}-[\dA-Fa-f]{4}-[\dA-Fa-f]{12}$'
+      requestBody:
+        description: The new player's placement information.
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateWager"
+            example:
+              mobiums: 399
+              victor: 0
+              csrf: <csrf_token>
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: "#/components/schemas/UpdateWager"
+      responses:
+        "200":
+          description: The updated wager.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Wager"
+              examples:
+                wagerExample:
+                  $ref: "#/components/examples/wagerExample"
+        "400":
+          description: >
+            One of the following:
+
+            * You provided an invalid CSRF token.
+            * You attempted to bet a negative amount of mobiums, or you
+              attempted to bet with more mobiums than you have.
+            * You attempted to bet on a team with no players.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          description: Client is unauthenticated.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              examples:
+                apiKeyUnauthenticatedExample:
+                  $ref: "#/components/examples/apiKeyUnauthenticatedExample"
+        "404":
+          description: The match does not exist.
           content:
             application/json:
               schema:
