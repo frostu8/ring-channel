@@ -1,12 +1,16 @@
 //! WebSocket events.
 
+pub mod client;
+pub mod server;
+
 use derive_more::From;
 
 use serde::{Deserialize, Serialize};
 
-use crate::message::server::{BattleUpdate, MobiumsChange, NewBattle, WagerUpdate};
-
-pub mod server;
+use crate::message::{
+    client::Heartbeat,
+    server::{BattleUpdate, HeartbeatAck, MobiumsChange, NewBattle, WagerUpdate},
+};
 
 /// A WebSocket message.
 ///
@@ -14,6 +18,10 @@ pub mod server;
 #[derive(Clone, Debug, Deserialize, Serialize, From)]
 #[serde(tag = "op", content = "d", rename_all = "kebab-case")]
 pub enum Message {
+    /// Periodic keepalive meessage from client.
+    Heartbeat(Heartbeat),
+    /// Response for a [`Message::Heartbeat`].
+    HeartbeatAck(HeartbeatAck),
     /// A server notification for a new match.
     NewBattle(NewBattle),
     /// A server notification for a concluded match.

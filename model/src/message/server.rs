@@ -4,6 +4,13 @@ use serde::{Deserialize, Serialize};
 
 use crate::{BattleWager, battle::Battle};
 
+/// Heartbeat acknowledgement.
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct HeartbeatAck {
+    /// The sequence number this is acknowledging.
+    pub seq: i32,
+}
+
 /// A notification for a new match.
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct NewBattle(pub Battle);
