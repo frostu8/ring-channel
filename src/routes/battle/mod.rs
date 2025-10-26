@@ -61,7 +61,7 @@ pub async fn show(
     };
 
     // Create battle struct
-    let accepting_bets = now < battle.closed_at;
+    let accepting_bets = now < battle.closed_at || battle.status != BattleStatus::Ongoing;
     let mut battle = Battle {
         id: uuid.hyphenated().to_string(),
         level_name: battle.level_name,

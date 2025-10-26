@@ -6,7 +6,7 @@ use chrono::{DateTime, Duration, Utc};
 
 use ring_channel_model::{
     User,
-    battle::{BattleWager, PlayerTeam},
+    battle::{BattleStatus, BattleWager, PlayerTeam},
     request::battle::UpdateWager,
 };
 
@@ -206,6 +206,8 @@ pub async fn create_self(
     #[derive(FromRow)]
     struct BattleQuery {
         id: i32,
+        #[sqlx(try_from = "u8")]
+        status: BattleStatus,
         closed_at: DateTime<Utc>,
     }
 
@@ -244,8 +246,13 @@ pub async fn create_self(
         return Err(AppError::not_found(format!("Match {} not found", match_id)));
     };
 
+    // matches that aren't ongoing are automatically closed
+    if battle.status != BattleStatus::Ongoing {
+        return Err(AppErrorKind::InvalidData("Bets have closed for this match.".into()).into());
+    }
+
     // give a little bit of wiggle room to prevent jebaits
-    if battle.closed_at + Duration::seconds(30) < now {
+    if battle.closed_at + Duration::seconds(3) < now {
         return Err(AppErrorKind::InvalidData("Bets have closed for this match.".into()).into());
     }
 
