@@ -251,6 +251,9 @@ pub async fn update(
         if now < battle_query.closed_at {
             battle_query.closed_at = now;
         }
+
+        // Update base schema value
+        battle_query.schema.status = new_status;
     }
 
     // Update match details
