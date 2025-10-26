@@ -11,13 +11,9 @@ use derive_more::{Display, Error, From};
 use futures_core::ready;
 use futures_util::{Sink, SinkExt, Stream, StreamExt};
 
-use ring_channel_model::ApiError;
-use ring_channel_model::message::Message;
+use ring_channel_model::message::{Message, client::Heartbeat, server::HeartbeatAck};
 
 use pin_project::pin_project;
-
-use ring_channel_model::message::client::Heartbeat;
-use ring_channel_model::message::server::HeartbeatAck;
 
 use tokio::time::{Sleep, sleep};
 
@@ -79,12 +75,11 @@ impl WebSocket {
     /// Sends a close message over the websocket.
     ///
     /// This starts the closing process.
-    pub async fn send_close(&mut self, code: u16, error: &ApiError) -> Result<(), Error> {
-        let msg = serde_json::to_string(error)?;
+    pub async fn send_close(&mut self, code: u16, message: &str) -> Result<(), Error> {
         self.inner
             .send(ws::Message::Close(Some(CloseFrame {
                 code,
-                reason: msg.into(),
+                reason: message.into(),
             })))
             .await?;
         // TODO: magic number?
@@ -183,12 +178,9 @@ impl Stream for WebSocket {
                 Poll::Ready(()) => {
                     // uh oh! client didn't send their government-mandated
                     // pings.
-                    let reason = serde_json::to_string(&ApiError {
-                        message: "Failed to heartbeat; disconnecting".into(),
-                    })?;
                     let frame = CloseFrame {
                         code: 1002,
-                        reason: reason.into(),
+                        reason: "Failed to heartbeat; disconnecting".into(),
                     };
                     this.inner
                         .as_mut()
@@ -212,12 +204,9 @@ impl Stream for WebSocket {
                     return Poll::Ready(Some(Ok(message)));
                 }
                 Some(Ok(ws::Message::Close(_close_frame))) => {
-                    let reason = serde_json::to_string(&ApiError {
-                        message: "Bye!".into(),
-                    })?;
                     let frame = CloseFrame {
                         code: 1001,
-                        reason: reason.into(),
+                        reason: "Bye!".into(),
                     };
                     *this.closed_client = true;
                     if let Err(_err) = this.inner.start_send(ws::Message::Close(Some(frame))) {
