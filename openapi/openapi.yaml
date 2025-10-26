@@ -144,12 +144,17 @@ components:
       type: object
       required:
         - username
+        - avatar
         - display_name
         - mobiums
       properties:
         username:
           type: string
           description: The user's unique username.
+        avatar:
+          type: string
+          description: A url to the user's avatar.
+          nullable: true
         display_name:
           type: string
           description: The user's display name.
@@ -161,6 +166,7 @@ components:
       type: object
       required:
         - username
+        - avatar
         - display_name
         - mobiums
       properties:
@@ -172,6 +178,10 @@ components:
             May be null if the generated username for the user conflicted, or
             failed some other constraints. In this case, you need to manually
             set your username.
+          nullable: true
+        avatar:
+          type: string
+          description: A url to the user's avatar.
           nullable: true
         display_name:
           type: string
@@ -297,12 +307,14 @@ components:
     userExample:
       value:
         username: frostu8
+        avatar: https://nicememe.website/avatar.png
         display_name: Ring Racer
         mobiums: 143
     wagerExample:
       value:
         user:
           username: frostu8
+          avatar: https://nicememe.website/avatar.png
           display_name: Ring Racer
           mobiums: 143
         mobiums: 143
