@@ -231,7 +231,7 @@ pub async fn create_self(
     let battle = sqlx::query_as::<_, BattleQuery>(
         r#"
         SELECT
-            id, closed_at
+            id, status, closed_at
         FROM
             battle
         WHERE
