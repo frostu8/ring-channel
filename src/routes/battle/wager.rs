@@ -19,6 +19,64 @@ use crate::{
     session::{Session, SessionUser},
 };
 
+/// Lists all wagers on a match.
+pub async fn list(
+    Path((match_id,)): Path<(Uuid,)>,
+    State(state): State<AppState>,
+) -> Result<AppJson<Vec<BattleWager>>, AppError> {
+    let mut conn = state.db.acquire().await?;
+
+    #[derive(FromRow)]
+    struct WagerQuery {
+        #[sqlx(try_from = "u8")]
+        victor: PlayerTeam,
+        mobiums: i64,
+        updated_at: DateTime<Utc>,
+        // user structs
+        username: String,
+        avatar: Option<String>,
+        display_name: String,
+        user_mobiums: i64,
+    }
+
+    let battle_id = get_battle_id(match_id, &mut *conn).await?;
+
+    // Fetch all wagers
+    let query = sqlx::query_as::<_, WagerQuery>(
+        r#"
+        SELECT
+            w.victor, w.mobiums, w.updated_at,
+            u.username, u.display_name, u.avatar, u.mobiums AS user_mobiums
+        FROM
+            wager w, user u
+        WHERE
+            w.user_id = u.id
+            AND w.mobiums > 0
+            AND match_id = $1
+        "#,
+    )
+    .bind(battle_id)
+    .fetch_all(&mut *conn)
+    .await?;
+
+    Ok(AppJson(
+        query
+            .into_iter()
+            .map(|query| BattleWager {
+                user: Some(User {
+                    username: query.username,
+                    avatar: query.avatar,
+                    display_name: query.display_name,
+                    mobiums: query.user_mobiums,
+                }),
+                victor: query.victor,
+                mobiums: query.mobiums,
+                updated_at: query.updated_at,
+            })
+            .collect(),
+    ))
+}
+
 /// Shows your wager on a match.
 pub async fn show_self(
     Path((match_id,)): Path<(Uuid,)>,

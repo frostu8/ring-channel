@@ -159,9 +159,10 @@ async fn main() -> Result<(), Error> {
                         .route("/", get(routes::battle::show))
                         .route("/", patch(routes::battle::update))
                         .route("/players/{short_id}", patch(routes::battle::player::update))
+                        .route("/wagers", get(routes::battle::wager::list))
                         .route("/wagers/~me", get(routes::battle::wager::show_self))
-                        .route("/wagers/{username}", get(routes::battle::wager::show))
-                        .route("/wagers/~me", put(routes::battle::wager::create_self)),
+                        .route("/wagers/~me", put(routes::battle::wager::create_self))
+                        .route("/wagers/{username}", get(routes::battle::wager::show)),
                 ),
         )
         .nest(
