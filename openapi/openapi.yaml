@@ -117,10 +117,9 @@ components:
         accepting_bets:
           type: boolean
           description: Whether or not the match is still accepting bets.
-        closes_at:
-          type: string
-          description: The time when the bets close.
-          format: date-time
+        closes_in:
+          type: integer
+          description: The time elapsed before wagers close, in ms.
     Wager:
       type: object
       required:
@@ -377,7 +376,7 @@ paths:
                     no_contest: false
                 status: 0
                 accepting_bets: true
-                closes_at: 2025-10-21T04:45:32.287657947Z
+                closes_in: 10203
         "400":
           description: >
             A participant was added to the match that does not exist.

@@ -1,10 +1,53 @@
 //! Battle functions and utilities.
 
-use ring_channel_model::{battle::PlayerTeam, message::server::MobiumsChange};
+use chrono::{DateTime, Utc};
+use ring_channel_model::{
+    Battle,
+    battle::{BattleStatus, PlayerTeam},
+    message::server::MobiumsChange,
+};
 
 use sqlx::{FromRow, SqliteConnection};
 
 use crate::{app::AppError, room::Room};
+
+/// A schema for battles stored in database.
+///
+/// Used primarily to construct [`Battle`]s.
+#[derive(Clone, Debug, FromRow)]
+pub struct BattleSchema {
+    pub uuid: String,
+    pub level_name: String,
+    #[sqlx(try_from = "u8")]
+    pub status: BattleStatus,
+    pub closed_at: DateTime<Utc>,
+}
+
+impl From<BattleSchema> for Battle {
+    fn from(value: BattleSchema) -> Self {
+        (&value).into()
+    }
+}
+
+impl From<&BattleSchema> for Battle {
+    fn from(value: &BattleSchema) -> Self {
+        let now = Utc::now();
+        let accepting_bets = now < value.closed_at;
+
+        Battle {
+            id: value.uuid.clone(),
+            level_name: value.level_name.clone(),
+            participants: vec![],
+            status: value.status,
+            accepting_bets,
+            closes_in: if accepting_bets {
+                Some((value.closed_at - now).abs().num_milliseconds())
+            } else {
+                None
+            },
+        }
+    }
+}
 
 /// Closes a match, divying up the pots in each.
 pub async fn calculate_winnings(

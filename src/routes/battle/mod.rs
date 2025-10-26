@@ -7,6 +7,8 @@ use axum::extract::{Path, State};
 
 use chrono::{DateTime, TimeDelta, Utc};
 
+use derive_more::{Deref, DerefMut};
+
 use ring_channel_model::{
     Player,
     battle::{Battle, BattleStatus, Participant, PlayerTeam},
@@ -24,7 +26,8 @@ use uuid::Uuid;
 use crate::{
     app::{AppError, AppJson, AppState, Payload, error::AppErrorKind},
     auth::api_key::ServerAuthentication,
-    battle::calculate_winnings,
+    battle::{BattleSchema, calculate_winnings},
+    room::BattleData,
 };
 
 /// Shows an existing match.
@@ -33,21 +36,11 @@ pub async fn show(
     Path((uuid,)): Path<(Uuid,)>,
     State(state): State<AppState>,
 ) -> Result<AppJson<Battle>, AppError> {
-    #[derive(FromRow)]
-    struct BattleQuery {
-        level_name: String,
-        #[sqlx(try_from = "u8")]
-        status: BattleStatus,
-        closed_at: DateTime<Utc>,
-    }
-
     let mut conn = state.db.acquire().await?;
 
-    let now = Utc::now();
-
-    let battle = sqlx::query_as::<_, BattleQuery>(
+    let battle = sqlx::query_as::<_, BattleSchema>(
         r#"
-        SELECT level_name, status, closed_at
+        SELECT uuid, level_name, status, closed_at
         FROM battle
         WHERE uuid = $1
         "#,
@@ -61,20 +54,7 @@ pub async fn show(
     };
 
     // Create battle struct
-    let accepting_bets = now < battle.closed_at || battle.status != BattleStatus::Ongoing;
-    let mut battle = Battle {
-        id: uuid.hyphenated().to_string(),
-        level_name: battle.level_name,
-        // We will preload this in a sec
-        participants: vec![],
-        status: battle.status,
-        accepting_bets,
-        closes_at: if accepting_bets {
-            Some(battle.closed_at)
-        } else {
-            None
-        },
-    };
+    let mut battle = Battle::from(battle);
 
     preload_participants(&mut battle, &mut *conn).await?;
 
@@ -98,7 +78,8 @@ pub async fn create(
     let uuid = Uuid::new_v4();
     let now = Utc::now();
 
-    let closed_at = now + TimeDelta::seconds(request.bet_time.unwrap_or(20));
+    let closes_in = TimeDelta::seconds(request.bet_time.unwrap_or(20));
+    let closed_at = now + closes_in;
 
     let mut tx = state.db.begin().await?;
 
@@ -168,17 +149,25 @@ pub async fn create(
     tx.commit().await?;
 
     // Create battle model
-    let battle = Battle {
-        id: uuid.hyphenated().to_string(),
+    let schema = BattleSchema {
+        uuid: uuid.hyphenated().to_string(),
         level_name: request.level_name,
         status: BattleStatus::Ongoing,
-        participants,
-        accepting_bets: true,
-        closes_at: Some(closed_at),
+        closed_at: closed_at,
     };
+    let mut battle = Battle::from(&schema);
+    battle.participants = participants.clone();
+    battle.accepting_bets = true;
+    battle.closes_in = Some(closes_in.num_milliseconds());
 
     // Send the notice of the new battle to all connected clients
-    state.room.update_battle(battle.clone()).await;
+    state
+        .room
+        .update_battle(BattleData {
+            schema,
+            participants,
+        })
+        .await;
 
     Ok((StatusCode::CREATED, AppJson(battle)))
 }
@@ -191,13 +180,13 @@ pub async fn update(
     State(state): State<AppState>,
     Payload(request): Payload<UpdateBattleRequest>,
 ) -> Result<AppJson<Battle>, AppError> {
-    #[derive(FromRow)]
+    #[derive(FromRow, Deref, DerefMut)]
     struct BattleQuery {
         id: i32,
-        level_name: String,
-        #[sqlx(try_from = "u8")]
-        status: BattleStatus,
-        closed_at: DateTime<Utc>,
+        #[sqlx(flatten)]
+        #[deref]
+        #[deref_mut]
+        schema: BattleSchema,
     }
 
     let now = Utc::now();
@@ -285,25 +274,18 @@ pub async fn update(
     .await?;
 
     // Create battle struct
-    let accepting_bets = now < battle_query.closed_at;
-    let mut battle = Battle {
-        id: uuid.hyphenated().to_string(),
-        level_name: battle_query.level_name,
-        // We will preload this in a sec
-        participants: vec![],
-        status: request.status.unwrap_or(battle_query.status),
-        accepting_bets,
-        closes_at: if accepting_bets {
-            Some(battle_query.closed_at)
-        } else {
-            None
-        },
-    };
+    let mut battle = Battle::from(&battle_query.schema);
 
     preload_participants(&mut battle, &mut *tx).await?;
 
     // Update websocket listeners
-    state.room.update_battle(battle.clone()).await;
+    state
+        .room
+        .update_battle(BattleData {
+            schema: battle_query.schema,
+            participants: battle.participants.clone(),
+        })
+        .await;
 
     if request.status == Some(BattleStatus::Concluded) {
         // close the match!

@@ -5,17 +5,17 @@
 
 pub mod protocol;
 
+use derive_more::Deref;
 pub use protocol::{Error, WebSocket};
 pub use ring_channel_model::message::Message;
 
 use std::sync::Arc;
 
-use chrono::Utc;
-
 use futures_util::SinkExt as _;
 
 use ring_channel_model::{
     Battle, BattleWager,
+    battle::Participant,
     message::server::{BattleUpdate, MobiumsChange, NewBattle, WagerUpdate},
 };
 
@@ -26,7 +26,7 @@ use tokio::sync::{
 
 use tracing::instrument;
 
-use crate::session::SessionUser;
+use crate::{battle::BattleSchema, session::SessionUser};
 
 /// An open room.
 ///
@@ -41,7 +41,31 @@ pub struct Room {
 #[derive(Debug)]
 struct RoomState {
     tx: Sender<RoomEvent>,
-    current_battle: RwLock<Option<Battle>>,
+    current_battle: RwLock<Option<BattleData>>,
+}
+
+/// Internal battle data held by the server.
+#[derive(Clone, Debug, Deref)]
+pub struct BattleData {
+    #[deref]
+    pub schema: BattleSchema,
+    pub participants: Vec<Participant>,
+}
+
+impl From<BattleData> for Battle {
+    fn from(value: BattleData) -> Self {
+        let mut battle = Battle::from(value.schema);
+        battle.participants = value.participants;
+        battle
+    }
+}
+
+impl From<&BattleData> for Battle {
+    fn from(value: &BattleData) -> Self {
+        let mut battle = Battle::from(&value.schema);
+        battle.participants = value.participants.clone();
+        battle
+    }
 }
 
 impl Room {
@@ -58,7 +82,7 @@ impl Room {
     }
 
     /// Sets a new match for the room, broadcasting it to all clients.
-    pub async fn update_battle(&self, new_battle: Battle) {
+    pub async fn update_battle(&self, new_battle: BattleData) {
         *self.state.current_battle.write().await = Some(new_battle.clone());
         let _ = self
             .state
@@ -83,19 +107,7 @@ impl Room {
     ///
     /// **This commandeers the calling task!**
     pub async fn serve(self, ws: axum::extract::ws::WebSocket, user: Option<SessionUser>) {
-        let now = Utc::now();
-
-        let mut battle = self.state.current_battle.read().await.clone();
-        if let Some(battle) = battle.as_mut() {
-            if battle
-                .closes_at
-                .map(|closes_at| closes_at < now)
-                .unwrap_or_default()
-            {
-                battle.accepting_bets = false;
-                battle.closes_at = None;
-            }
-        }
+        let battle = self.state.current_battle.read().await.clone();
 
         tracing::debug!(?battle, "serving new client");
 
@@ -124,7 +136,7 @@ pub struct Handle {
 #[derive(Debug, Clone)]
 enum RoomEvent {
     UpdateBattle {
-        battle: Battle,
+        battle: BattleData,
     },
     WagerUpdate {
         wager: BattleWager,
@@ -145,14 +157,14 @@ struct WebSocketState {
     user: Option<SessionUser>,
 
     // Room state things
-    battle: Option<Battle>,
+    battle: Option<BattleData>,
 }
 
 /// Serves a websocket.
 async fn serve(mut state: WebSocketState) {
     // Give client the rundown on what's happening
     if let Some(battle) = state.battle.as_ref() {
-        let _ = state.ws.send(&NewBattle(battle.clone()).into()).await;
+        let _ = state.ws.send(&NewBattle(battle.into()).into()).await;
     }
 
     while !state.ws.is_closed() {
@@ -218,12 +230,12 @@ async fn handle_server_event(state: &mut WebSocketState, ev: RoomEvent) -> Resul
 
             // A new match was started, or updated
             // Check if the match we have is the same
-            if old_battle.as_ref().map(|b| &b.id) != Some(&battle.id) {
+            if old_battle.as_ref().map(|b| &b.uuid) != Some(&battle.uuid) {
                 // This is a new battle!
-                state.ws.send(&NewBattle(battle).into()).await?;
+                state.ws.send(&NewBattle(battle.into()).into()).await?;
             } else {
                 // This is the same battle, it just got updated
-                state.ws.send(&BattleUpdate(battle).into()).await?;
+                state.ws.send(&BattleUpdate(battle.into()).into()).await?;
             }
         }
         RoomEvent::WagerUpdate { wager } => {

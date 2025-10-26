@@ -24,9 +24,9 @@ pub struct Battle {
     pub status: BattleStatus,
     /// Whether the match is accepting bets or not.
     pub accepting_bets: bool,
-    /// When wagers close at. Get them in!
+    /// The amount of time that will pass before wagers close, in ms.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub closes_at: Option<DateTime<Utc>>,
+    pub closes_in: Option<i64>,
 }
 
 /// A participant in a match.

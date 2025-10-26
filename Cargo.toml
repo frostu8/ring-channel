@@ -12,7 +12,7 @@ anyhow = "1"
 axum = { version = "0.8", features = ["macros", "ws"] }
 axum-server = "0.7"
 chrono = { workspace = true }
-derive_more = { workspace = true, features = ["display", "error", "from", "deref"] }
+derive_more = { workspace = true, features = ["display", "error", "from", "deref", "deref_mut"] }
 dotenv = "0.15"
 figment = { version = "0.10", features = ["env", "toml"] }
 futures-util = "0.3"
