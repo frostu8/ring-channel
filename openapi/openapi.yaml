@@ -611,6 +611,50 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
+  /matches/{match_id}/wagers:
+    get:
+      tags:
+        - match
+      summary: Fetch All Wagers
+      description: >
+        Gets all the wagers made on a match.
+      security: []
+      operationId: fetch_all_wagers
+      parameters:
+        - name: match_id
+          in: path
+          description: Match UUID
+          required: true
+          schema:
+            type: string
+            example: 18e0b086-5557-4245-877d-19729bf6d4bd
+            pattern: '^[\dA-Fa-f]{8}-[\dA-Fa-f]{4}-[\dA-Fa-f]{4}-[\dA-Fa-f]{4}-[\dA-Fa-f]{12}$'
+      responses:
+        "200":
+          description: The wager.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Wager"
+              examples:
+                wagerExample:
+                  value:
+                    - user:
+                        username: frostu8
+                        avatar: https://nicememe.website/avatar.png
+                        display_name: Ring Racer
+                        mobiums: 143
+                      mobiums: 143
+                      victor: 0
+                      updated_at: 2025-10-24T05:37:07.578866465Z
+        "404":
+          description: The match does not exist.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
   /matches/{match_id}/wagers/~me:
     get:
       tags:
