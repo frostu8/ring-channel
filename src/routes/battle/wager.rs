@@ -277,6 +277,11 @@ pub async fn create_self(
             (user_id, match_id, victor, mobiums, inserted_at, updated_at)
         VALUES
             ($1, $2, $3, $4, $5, $5)
+        ON CONFLICT (user_id, match_id) DO UPDATE
+        SET
+            victor = $3,
+            mobiums = $4,
+            updated_at = $5
         "#,
     )
     .bind(user.identity())
