@@ -196,7 +196,7 @@ pub async fn update(
     let battle_query = sqlx::query_as::<_, BattleQuery>(
         r#"
         SELECT
-            id, level_name, status, closed_at
+            id, uuid, level_name, status, closed_at
         FROM
             battle
         WHERE
