@@ -4,15 +4,18 @@ pub mod error;
 
 pub use error::AppError;
 
+use axum_valid::{Garde, GardeRejection, HasValidate};
+
 use axum::{
-    Form, Json, RequestExt as _,
-    extract::{FromRequest, Request},
+    Form, Json, RequestExt as _, RequestPartsExt as _,
+    extract::{FromRef, FromRequest, FromRequestParts, Request},
     response::{IntoResponse, Response},
 };
 
 use derive_more::Deref;
 
-use http::header;
+use garde::Validate;
+use http::{header, request::Parts};
 
 use serde::de::DeserializeOwned;
 
@@ -66,10 +69,73 @@ where
     }
 }
 
+/// App Garde extrarctor.
+#[derive(Deref)]
+pub struct AppGarde<T>(pub T);
+
+impl<S, T> FromRequestParts<S> for AppGarde<T>
+where
+    S: Send + Sync,
+    T: FromRequestParts<S> + HasValidate + 'static,
+    AppError: From<<T as FromRequestParts<S>>::Rejection>,
+    <T as HasValidate>::Validate: Validate,
+    <<T as HasValidate>::Validate as Validate>::Context: Send + Sync + FromRef<S>,
+{
+    type Rejection = AppError;
+
+    async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, Self::Rejection> {
+        let valid = parts.extract_with_state::<Garde<T>, S>(state).await;
+
+        match valid {
+            Ok(Garde(valid)) => Ok(AppGarde(valid)),
+            Err(GardeRejection::Valid(garde)) => Err(AppErrorKind::Garde(garde).into()),
+            Err(GardeRejection::Inner(err)) => Err(err.into()),
+        }
+    }
+}
+
+impl<S, T> FromRequest<S> for AppGarde<T>
+where
+    S: Send + Sync,
+    T: FromRequest<S> + HasValidate + 'static,
+    AppError: From<<T as FromRequest<S>>::Rejection>,
+    <T as HasValidate>::Validate: Validate,
+    <<T as HasValidate>::Validate as Validate>::Context: Send + Sync + FromRef<S>,
+{
+    type Rejection = AppError;
+
+    async fn from_request(request: Request, state: &S) -> Result<Self, Self::Rejection> {
+        let valid = request.extract_with_state::<Garde<T>, S, _>(state).await;
+
+        match valid {
+            Ok(Garde(valid)) => Ok(AppGarde(valid)),
+            Err(GardeRejection::Valid(garde)) => Err(AppErrorKind::Garde(garde).into()),
+            Err(GardeRejection::Inner(err)) => Err(err.into()),
+        }
+    }
+}
+
+impl<T> IntoResponse for AppGarde<T>
+where
+    T: IntoResponse,
+{
+    fn into_response(self) -> Response {
+        self.0.into_response()
+    }
+}
+
 /// App Form extractor and responder.
 #[derive(Deref, FromRequest)]
 #[from_request(via(Form), rejection(AppError))]
 pub struct AppForm<T>(pub T);
+
+impl<T> HasValidate for AppForm<T> {
+    type Validate = T;
+
+    fn get_validate(&self) -> &Self::Validate {
+        &self.0
+    }
+}
 
 impl<T> IntoResponse for AppForm<T>
 where
@@ -84,6 +150,14 @@ where
 #[derive(Deref, FromRequest)]
 #[from_request(via(Json), rejection(AppError))]
 pub struct AppJson<T>(pub T);
+
+impl<T> HasValidate for AppJson<T> {
+    type Validate = T;
+
+    fn get_validate(&self) -> &Self::Validate {
+        &self.0
+    }
+}
 
 impl<T> IntoResponse for AppJson<T>
 where

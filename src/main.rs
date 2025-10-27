@@ -152,6 +152,7 @@ async fn main() -> Result<(), Error> {
         .nest(
             "/matches",
             Router::<AppState>::new()
+                .route("/", get(routes::battle::list))
                 .route("/", post(routes::battle::create))
                 .nest(
                     "/{battle_id}",

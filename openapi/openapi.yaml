@@ -98,6 +98,7 @@ components:
         - level_name
         - participants
         - status
+        - started_at
         - accepting_bets
       properties:
         id:
@@ -114,6 +115,10 @@ components:
             $ref: "#/components/schemas/Participant"
         status:
           $ref: "#/components/schemas/MatchStatus"
+        started_at:
+          type: string
+          description: When the match started.
+          format: date-time
         accepting_bets:
           type: boolean
           description: Whether or not the match is still accepting bets.
@@ -291,6 +296,7 @@ components:
             team: 1
             no_contest: true
         status: 1
+        started_at: 2025-10-27T08:25:37.318613303Z
         accepting_bets: false
     participantExample:
       value:
@@ -325,6 +331,84 @@ components:
 
 paths:
   /matches:
+    get:
+      tags:
+        - match
+      summary: Fetch All Matches
+      description: >
+        Fetches all the matches that have taken place.
+      security: []
+      operationId: fetch_all_matches
+      parameters:
+        - name: count
+          in: query
+          description: How many results to return
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 50
+            example: 50
+        - name: before
+          in: query
+          description: Get matches before this time
+          schema:
+            type: string
+            example: 2025-10-27T06:53:21.694619841Z
+            format: date-time
+        - name: after
+          in: query
+          description: Get matches afterr this time
+          schema:
+            type: string
+            example: 2025-10-27T06:53:21.694619841Z
+            format: date-time
+      responses:
+        "200":
+          description: A list of matches
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Match"
+              example:
+                - id: 18e0b086-5557-4245-877d-19729bf6d4bd
+                  level_name: Robotnik Coaster
+                  participants:
+                    - id: GJBIJK
+                      display_name: Dr. Robotnik
+                      team: 0
+                      no_contest: false
+                    - id: 4ZWBU0
+                      display_name: Tails
+                      team: 1
+                      no_contest: false
+                  status: 0
+                  started_at: 2025-10-27T08:25:37.318613303Z
+                  accepting_bets: true
+                  closes_in: 10203
+                - id: 18e0b086-5557-4245-877d-19729bf6d4bd
+                  level_name: Robotnik Coaster
+                  participants:
+                    - id: GJBIJK
+                      display_name: Dr. Robotnik
+                      team: 0
+                      finish_time: 36149
+                      no_contest: false
+                    - id: 4ZWBU0
+                      display_name: Tails
+                      team: 1
+                      no_contest: true
+                  status: 1
+                  started_at: 2025-10-27T08:25:37.318613303Z
+                  accepting_bets: false
+        "400":
+          description: >
+            A bad count was given, or before or after was a malformed datetime.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
     post:
       tags:
         - match
@@ -375,6 +459,7 @@ paths:
                     team: 1
                     no_contest: false
                 status: 0
+                started_at: 2025-10-27T08:25:37.318613303Z
                 accepting_bets: true
                 closes_in: 10203
         "400":

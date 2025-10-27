@@ -20,6 +20,7 @@ pub struct BattleSchema {
     pub level_name: String,
     #[sqlx(try_from = "u8")]
     pub status: BattleStatus,
+    pub inserted_at: DateTime<Utc>,
     pub closed_at: DateTime<Utc>,
 }
 
@@ -39,6 +40,7 @@ impl From<&BattleSchema> for Battle {
             level_name: value.level_name.clone(),
             participants: vec![],
             status: value.status,
+            started_at: value.inserted_at,
             accepting_bets,
             closes_in: if accepting_bets {
                 Some((value.closed_at - now).abs().num_milliseconds())

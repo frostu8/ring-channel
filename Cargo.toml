@@ -43,6 +43,8 @@ base16 = "0.2"
 cookie = { version = "0.18", features = ["private"] }
 pin-project = "1"
 futures-core = "0.3"
+axum-valid = { version = "0.24", default-features = false, features = ["garde", "basic"] }
+garde = { version = "0.22.0", features = ["derive"] }
 
 [workspace]
 resolver = "3"

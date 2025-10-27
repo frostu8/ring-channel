@@ -13,6 +13,8 @@ use axum::{
     response::{IntoResponse, Response},
 };
 
+use garde::error::Report;
+
 use derive_more::{Display, From};
 
 use http::StatusCode;
@@ -106,6 +108,12 @@ impl AppError {
                 StatusCode::BAD_REQUEST,
                 ApiError {
                     message: error_kind.to_string(),
+                },
+            ),
+            AppErrorKind::Garde(error) => (
+                StatusCode::BAD_REQUEST,
+                ApiError {
+                    message: error.to_string(),
                 },
             ),
             AppErrorKind::Json(error) => (
@@ -231,6 +239,7 @@ impl Error for AppError {
             AppErrorKind::WebSocket(err) => Some(err),
             AppErrorKind::HttpClient(err) => Some(err),
             AppErrorKind::Discord(err) => Some(err),
+            AppErrorKind::Garde(err) => Some(err),
             AppErrorKind::Other(err) => err.source(),
             _ => None,
         }
@@ -261,6 +270,9 @@ pub enum AppErrorKind {
     /// The request's urlencoded payload was malformed or invalid.
     #[display("{_0}")]
     Form(FormRejection),
+    /// Input validation failed.
+    #[display("{_0}")]
+    Garde(Report),
     /// A resource was not found.
     #[display("Resource not found")]
     NotFound,

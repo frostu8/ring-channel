@@ -9,6 +9,8 @@ use chrono::{DateTime, TimeDelta, Utc};
 
 use derive_more::{Deref, DerefMut};
 
+use garde::Validate;
+
 use ring_channel_model::{
     Player,
     battle::{Battle, BattleStatus, Participant, PlayerTeam},
@@ -17,6 +19,8 @@ use ring_channel_model::{
 
 use http::StatusCode;
 
+use serde::Deserialize;
+
 use sqlx::{FromRow, SqliteConnection};
 
 use tracing::instrument;
@@ -24,11 +28,68 @@ use tracing::instrument;
 use uuid::Uuid;
 
 use crate::{
-    app::{AppError, AppJson, AppState, Payload, error::AppErrorKind},
+    app::{AppError, AppForm, AppGarde, AppJson, AppState, Payload, error::AppErrorKind},
     auth::api_key::ServerAuthentication,
     battle::{BattleSchema, calculate_winnings},
     room::BattleData,
 };
+
+/// A query for [`list`].
+#[derive(Deserialize, Debug, Validate)]
+#[garde(context(AppState as state))]
+pub struct ListBattlesQuery {
+    #[garde(range(min = 1, max = 50))]
+    #[serde(default = "list_battle_count_default")]
+    pub count: i32,
+    #[garde(skip)]
+    pub before: Option<DateTime<Utc>>,
+    #[garde(skip)]
+    pub after: Option<DateTime<Utc>>,
+}
+
+fn list_battle_count_default() -> i32 {
+    50
+}
+
+/// Lists all matches.
+#[instrument(skip(state))]
+#[axum::debug_handler]
+pub async fn list(
+    State(state): State<AppState>,
+    AppGarde(AppForm(query)): AppGarde<AppForm<ListBattlesQuery>>,
+) -> Result<AppJson<Vec<Battle>>, AppError> {
+    let mut conn = state.db.acquire().await?;
+
+    let mut battles = sqlx::query_as::<_, BattleSchema>(
+        r#"
+        SELECT
+            uuid, level_name, status, inserted_at, closed_at
+        FROM
+            battle
+        WHERE
+            ($1 IS NULL OR inserted_at < $1)
+            AND ($2 IS NULL OR inserted_at > $2)
+        ORDER BY
+            inserted_at DESC
+        LIMIT $3
+        "#,
+    )
+    .bind(query.before)
+    .bind(query.after)
+    .bind(query.count)
+    .fetch_all(&mut *conn)
+    .await?
+    .into_iter()
+    .map(|b| Battle::from(b))
+    .collect::<Vec<_>>();
+
+    // Preload all battles
+    for battle in battles.iter_mut() {
+        preload_participants(battle, &mut *conn).await?;
+    }
+
+    Ok(AppJson(battles))
+}
 
 /// Shows an existing match.
 #[instrument(skip(state))]
@@ -40,7 +101,7 @@ pub async fn show(
 
     let battle = sqlx::query_as::<_, BattleSchema>(
         r#"
-        SELECT uuid, level_name, status, closed_at
+        SELECT uuid, level_name, status, inserted_at, closed_at
         FROM battle
         WHERE uuid = $1
         "#,
@@ -153,6 +214,7 @@ pub async fn create(
         uuid: uuid.hyphenated().to_string(),
         level_name: request.level_name,
         status: BattleStatus::Ongoing,
+        inserted_at: now,
         closed_at: closed_at,
     };
     let mut battle = Battle::from(&schema);
@@ -196,7 +258,7 @@ pub async fn update(
     let battle_query = sqlx::query_as::<_, BattleQuery>(
         r#"
         SELECT
-            id, uuid, level_name, status, closed_at
+            id, uuid, level_name, status, inserted_at, closed_at
         FROM
             battle
         WHERE
