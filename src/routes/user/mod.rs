@@ -22,13 +22,17 @@ pub async fn show_me(
         avatar: Option<String>,
         display_name: String,
         mobiums: i64,
+        mobiums_gained: i64,
+        mobiums_lost: i64,
     }
 
     if let Some(identity) = session.identity {
         // fetch identity
         let user = sqlx::query_as::<_, MaybeUserQuery>(
             r#"
-            SELECT username, avatar, display_name, mobiums
+            SELECT
+                username, avatar, display_name, mobiums, mobiums_gained,
+                mobiums_lost
             FROM user
             WHERE id = $1
             "#,
@@ -43,6 +47,8 @@ pub async fn show_me(
                 avatar: user.avatar,
                 display_name: user.display_name,
                 mobiums: user.mobiums,
+                mobiums_gained: user.mobiums_gained,
+                mobiums_lost: user.mobiums_lost,
             }))
         } else {
             Err(AppErrorKind::InvalidSession.into())

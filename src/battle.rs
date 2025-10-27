@@ -1,5 +1,7 @@
 //! Battle functions and utilities.
 
+use std::cmp::{max, min};
+
 use chrono::{DateTime, Utc};
 use ring_channel_model::{
     Battle,
@@ -142,6 +144,9 @@ pub async fn calculate_winnings(
 
         let mut new_mobiums = wager.user_mobiums + mobiums_change;
 
+        let mobiums_gained = max(0, mobiums_change);
+        let mobiums_lost = min(0, mobiums_change) * -1;
+
         // GG bro...
         let mut bailout = false;
         if new_mobiums <= 0 {
@@ -155,13 +160,17 @@ pub async fn calculate_winnings(
             UPDATE user
             SET
                 mobiums = $1,
-                bailout_count = bailout_count + $2
+                bailout_count = bailout_count + $2,
+                mobiums_gained = mobiums_gained + $3,
+                mobiums_lost = mobiums_lost + $4
             WHERE
-                id = $3
+                id = $5
             "#,
         )
         .bind(new_mobiums)
         .bind(if bailout { 1 } else { 0 })
+        .bind(mobiums_gained)
+        .bind(mobiums_lost)
         .bind(wager.user_id)
         .execute(&mut *tx)
         .await?;

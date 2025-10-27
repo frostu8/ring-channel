@@ -18,6 +18,10 @@ pub struct CurrentUser {
     pub display_name: String,
     /// How many mobiums they have.
     pub mobiums: i64,
+    /// How many mobiums they have gained in their lifetime.
+    pub mobiums_gained: i64,
+    /// How many mobiums they have lost in their lifetime.
+    pub mobiums_lost: i64,
 }
 
 /// A single user.
@@ -31,6 +35,10 @@ pub struct User {
     pub display_name: String,
     /// How many mobiums they have.
     pub mobiums: i64,
+    /// How many mobiums they have gained in their lifetime.
+    pub mobiums_gained: i64,
+    /// How many mobiums they have lost in their lifetime.
+    pub mobiums_lost: i64,
 }
 
 /// Converts plaintext to a "usable username."

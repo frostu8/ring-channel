@@ -37,6 +37,8 @@ pub async fn list(
         avatar: Option<String>,
         display_name: String,
         user_mobiums: i64,
+        mobiums_gained: i64,
+        mobiums_lost: i64,
     }
 
     let battle_id = get_battle_id(match_id, &mut *conn).await?;
@@ -46,7 +48,8 @@ pub async fn list(
         r#"
         SELECT
             w.victor, w.mobiums, w.updated_at,
-            u.username, u.display_name, u.avatar, u.mobiums AS user_mobiums
+            u.username, u.display_name, u.avatar, u.mobiums AS user_mobiums,
+            u.mobiums_gained, u.mobiums_lost
         FROM
             wager w, user u
         WHERE
@@ -68,6 +71,8 @@ pub async fn list(
                     avatar: query.avatar,
                     display_name: query.display_name,
                     mobiums: query.user_mobiums,
+                    mobiums_gained: query.mobiums_gained,
+                    mobiums_lost: query.mobiums_lost,
                 }),
                 victor: query.victor,
                 mobiums: query.mobiums,
@@ -96,6 +101,8 @@ pub async fn show_self(
         avatar: Option<String>,
         display_name: String,
         user_mobiums: i64,
+        mobiums_gained: i64,
+        mobiums_lost: i64,
     }
 
     let battle_id = get_battle_id(match_id, &mut *conn).await?;
@@ -105,7 +112,8 @@ pub async fn show_self(
         r#"
         SELECT
             w.victor, w.mobiums, w.updated_at,
-            u.username, u.display_name, u.avatar, u.mobiums AS user_mobiums
+            u.username, u.display_name, u.avatar, u.mobiums AS user_mobiums,
+            u.mobiums_gained, u.mobiums_lost
         FROM
             wager w, user u
         WHERE
@@ -130,6 +138,8 @@ pub async fn show_self(
             avatar: query.avatar,
             display_name: query.display_name,
             mobiums: query.user_mobiums,
+            mobiums_gained: query.mobiums_gained,
+            mobiums_lost: query.mobiums_lost,
         }),
         victor: query.victor,
         mobiums: query.mobiums,
@@ -155,6 +165,8 @@ pub async fn show(
         avatar: Option<String>,
         display_name: String,
         user_mobiums: i64,
+        mobiums_gained: i64,
+        mobiums_lost: i64,
     }
 
     let battle_id = get_battle_id(match_id, &mut *conn).await?;
@@ -164,7 +176,8 @@ pub async fn show(
         r#"
         SELECT
             w.victor, w.mobiums, w.updated_at,
-            u.username, u.display_name, u.avatar, u.mobiums AS user_mobiums
+            u.username, u.display_name, u.avatar, u.mobiums AS user_mobiums,
+            u.mobiums_gained, u.mobiums_lost
         FROM
             wager w, user u
         WHERE
@@ -188,6 +201,8 @@ pub async fn show(
             avatar: query.avatar,
             display_name: query.display_name,
             mobiums: query.user_mobiums,
+            mobiums_gained: query.mobiums_gained,
+            mobiums_lost: query.mobiums_lost,
         }),
         victor: query.victor,
         mobiums: query.mobiums,
@@ -310,6 +325,8 @@ pub async fn create_self(
             avatar: user.avatar.clone(),
             display_name: user.display_name.clone(),
             mobiums: user.mobiums,
+            mobiums_gained: user.mobiums_gained,
+            mobiums_lost: user.mobiums_lost,
         }),
         victor: update_wager.victor,
         mobiums: update_wager.mobiums,
