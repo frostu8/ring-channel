@@ -88,7 +88,9 @@ pub async fn calculate_winnings(
         r#"
         SELECT team
         FROM participant
-        WHERE NOT no_contest
+        WHERE
+            match_id = $1
+            AND NOT no_contest
         ORDER BY finish_time ASC
         LIMIT 1
         "#,
