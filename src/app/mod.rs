@@ -2,6 +2,8 @@
 
 pub mod error;
 
+use std::sync::Arc;
+
 pub use error::AppError;
 
 use axum_valid::{Garde, GardeRejection, HasValidate};
@@ -21,7 +23,7 @@ use serde::de::DeserializeOwned;
 
 use sqlx::SqlitePool;
 
-use crate::{app::error::AppErrorKind, room};
+use crate::{app::error::AppErrorKind, config::Config, room};
 
 /// Shared app state.
 ///
@@ -32,6 +34,10 @@ pub struct AppState {
     pub db: SqlitePool,
     /// The WebSocket room.
     pub room: room::Room,
+    /// Server config.
+    ///
+    /// May be missing secrets as they are taken at initialization.
+    pub config: Arc<Config>,
 }
 
 /// Selective body extractor.

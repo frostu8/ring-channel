@@ -44,7 +44,7 @@ cookie = { version = "0.18", features = ["private"] }
 pin-project = "1"
 futures-core = "0.3"
 axum-valid = { version = "0.24", default-features = false, features = ["garde", "basic"] }
-garde = { version = "0.22.0", features = ["derive"] }
+garde = { version = "0.22", features = ["derive"] }
 
 [workspace]
 resolver = "3"
@@ -54,6 +54,8 @@ members = ["model"]
 edition = "2024"
 
 [workspace.dependencies]
+bitflags = { version = "2.10.0", features = ["serde", "std"] }
+bytemuck = "1.24"
 chrono = { version = "0.4", features = ["serde"] }
 derive_more = "2"
 ring-channel-model = { path = "./model" }

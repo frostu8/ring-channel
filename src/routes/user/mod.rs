@@ -1,7 +1,7 @@
 //! Users endpoints.
 
 use axum::extract::State;
-use ring_channel_model::user::CurrentUser;
+use ring_channel_model::user::{CurrentUser, UserFlags};
 use sqlx::FromRow;
 
 use crate::{
@@ -24,6 +24,8 @@ pub async fn show_me(
         mobiums: i64,
         mobiums_gained: i64,
         mobiums_lost: i64,
+        #[sqlx(try_from = "i32")]
+        flags: UserFlags,
     }
 
     if let Some(identity) = session.identity {
@@ -32,7 +34,7 @@ pub async fn show_me(
             r#"
             SELECT
                 username, avatar, display_name, mobiums, mobiums_gained,
-                mobiums_lost
+                mobiums_lost, flags
             FROM user
             WHERE id = $1
             "#,
@@ -49,6 +51,7 @@ pub async fn show_me(
                 mobiums: user.mobiums,
                 mobiums_gained: user.mobiums_gained,
                 mobiums_lost: user.mobiums_lost,
+                flags: user.flags,
             }))
         } else {
             Err(AppErrorKind::InvalidSession.into())

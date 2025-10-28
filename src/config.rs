@@ -7,6 +7,7 @@ use figment::{
     providers::{Env, Format, Serialized, Toml},
     value::Uncased,
 };
+use ring_channel_model::user::to_username_lossy;
 use serde::{Deserialize, Serialize};
 
 use anyhow::Error;
@@ -38,6 +39,8 @@ pub struct ServerConfig {
     pub secure_sessions: bool,
     /// Key used to encrypt cookies.
     pub encryption_key: Option<String>,
+    /// Wager bot config.
+    pub bot: WagerBotConfig,
 }
 
 impl Default for ServerConfig {
@@ -48,6 +51,37 @@ impl Default for ServerConfig {
             database_url: None,
             secure_sessions: true,
             encryption_key: None,
+            bot: WagerBotConfig::default(),
+        }
+    }
+}
+
+/// Wager bot configuration.
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct WagerBotConfig {
+    /// Enables the wager bot.
+    pub enabled: bool,
+    /// The username of the wager bot.
+    ///
+    /// This will identify the bot on the server. If this is changed to
+    /// something else, the server will make a new bot account.
+    pub username: String,
+    /// The display name of the wager bot.
+    pub display_name: String,
+    /// A URL to the avatar of the wager bot.
+    pub avatar: Option<String>,
+    /// How much money the bot will wager on an empty side.
+    pub wager_amount: i64,
+}
+
+impl Default for WagerBotConfig {
+    fn default() -> Self {
+        WagerBotConfig {
+            enabled: false,
+            username: to_username_lossy("xxmetalxx").into(),
+            display_name: "Metal Sonic".into(),
+            avatar: None,
+            wager_amount: 400,
         }
     }
 }

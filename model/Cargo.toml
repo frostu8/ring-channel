@@ -10,3 +10,5 @@ num_enum = { workspace = true }
 serde = { workspace = true }
 serde_repr = { workspace = true }
 derive_more = { workspace = true, features = ["display", "error", "deref", "from"] }
+bitflags = { workspace = true }
+bytemuck.workspace = true

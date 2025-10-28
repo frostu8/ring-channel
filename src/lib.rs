@@ -10,3 +10,4 @@ pub mod config;
 pub mod room;
 pub mod routes;
 pub mod session;
+pub mod user;

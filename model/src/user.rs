@@ -4,6 +4,8 @@ use std::borrow::Cow;
 
 use serde::{Deserialize, Serialize};
 
+use bytemuck::cast;
+
 /// The current user returned by `/users/~me`.
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq, Hash)]
 pub struct CurrentUser {
@@ -22,6 +24,8 @@ pub struct CurrentUser {
     pub mobiums_gained: i64,
     /// How many mobiums they have lost in their lifetime.
     pub mobiums_lost: i64,
+    /// The user flags.
+    pub flags: UserFlags,
 }
 
 /// A single user.
@@ -39,6 +43,38 @@ pub struct User {
     pub mobiums_gained: i64,
     /// How many mobiums they have lost in their lifetime.
     pub mobiums_lost: i64,
+    /// The user flags.
+    pub flags: UserFlags,
+}
+
+bitflags::bitflags! {
+    /// User flags.
+    #[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq, Hash)]
+    pub struct UserFlags: u32 {
+        /// The player may bet with money that they don't have.
+        ///
+        /// This prevents the player from getting bailouts, but in return they
+        /// can bet money they don't have, allowing them to dip into negative
+        /// mobiums.
+        const UNLIMITED_WAGERS = 0b00000001;
+        /// The user is a bot managed by the server.
+        const AUTOMATED_USER = 0b00000010;
+        /// This user helped beta test. Thanks!
+        const BETA_TESTER = 0b00000100;
+    }
+}
+
+impl From<i32> for UserFlags {
+    fn from(value: i32) -> Self {
+        let value: u32 = cast(value);
+        UserFlags::from_bits_truncate(value)
+    }
+}
+
+impl From<UserFlags> for i32 {
+    fn from(value: UserFlags) -> Self {
+        cast(value.bits())
+    }
 }
 
 /// Converts plaintext to a "usable username."

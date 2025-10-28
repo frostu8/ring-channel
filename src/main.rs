@@ -70,12 +70,12 @@ async fn main() -> Result<(), Error> {
     };
 
     // Read config file
-    let config = Arc::new(read_config(config_path)?);
+    let mut config = read_config(config_path)?;
 
     let database_url = config
         .server
         .database_url
-        .clone()
+        .take()
         .ok_or_else(|| Error::msg("No `DATABASE_URL` set!"))?;
 
     // Run any pending commands
@@ -105,7 +105,7 @@ async fn main() -> Result<(), Error> {
         return Ok(());
     }
 
-    let encryption_key = if let Some(key_str) = config.server.encryption_key.as_ref() {
+    let encryption_key = if let Some(key_str) = config.server.encryption_key.take() {
         if key_str.len() > 128 {
             tracing::error!("encryption key too long! generate with `ring-channel generate-key`");
             std::process::exit(1);
@@ -136,6 +136,7 @@ async fn main() -> Result<(), Error> {
 
     // Create app state
     let state = AppState {
+        config: Arc::new(config.clone()),
         db: db.clone(),
         room: room::Room::new(),
     };
@@ -162,7 +163,7 @@ async fn main() -> Result<(), Error> {
                         .route("/players/{short_id}", patch(routes::battle::player::update))
                         .route("/wagers", get(routes::battle::wager::list))
                         .route("/wagers/~me", get(routes::battle::wager::show_self))
-                        .route("/wagers/~me", put(routes::battle::wager::create_self))
+                        .route("/wagers/~me", put(routes::battle::wager::create))
                         .route("/wagers/{username}", get(routes::battle::wager::show)),
                 ),
         )

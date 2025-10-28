@@ -2,6 +2,7 @@
 redirect_url = "http://localhost:4001/"
 base_url = "http://localhost:4001/api/v1"
 secure_sessions = false
+bot.enabled = true
 
 [http]
 port = 4000

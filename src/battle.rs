@@ -7,6 +7,7 @@ use ring_channel_model::{
     Battle,
     battle::{BattleStatus, PlayerTeam},
     message::server::MobiumsChange,
+    user::UserFlags,
 };
 
 use sqlx::{FromRow, SqliteConnection};
@@ -72,6 +73,8 @@ pub async fn calculate_winnings(
         victor: PlayerTeam,
         mobiums: i64,
         user_mobiums: i64,
+        #[sqlx(try_from = "i32")]
+        user_flags: UserFlags,
     }
 
     // To figure out how much money we owe to each player, we first need to
@@ -113,7 +116,7 @@ pub async fn calculate_winnings(
         r#"
         SELECT
             w.user_id, w.victor, w.mobiums,
-            u.mobiums AS user_mobiums
+            u.mobiums AS user_mobiums, u.flags AS user_flags
         FROM
             wager w, user u
         WHERE
@@ -126,6 +129,12 @@ pub async fn calculate_winnings(
     .await?;
 
     for wager in wagers {
+        // Skip empty wagers
+        // Wagers can't be deleted, just set to zero
+        if wager.mobiums <= 0 {
+            continue;
+        }
+
         // Did this user win or lose money?
         let mobiums_change = if wager.victor == winner.team {
             // They won! Give them some of the winnings
@@ -147,11 +156,14 @@ pub async fn calculate_winnings(
         let mobiums_gained = max(0, mobiums_change);
         let mobiums_lost = min(0, mobiums_change) * -1;
 
-        // GG bro...
+        // Do bailouts if user does not have infinite funds
         let mut bailout = false;
-        if new_mobiums <= 0 {
-            bailout = true;
-            new_mobiums = 100; // TODO: magic number?
+        if !wager.user_flags.contains(UserFlags::UNLIMITED_WAGERS) {
+            // GG bro...
+            if new_mobiums <= 0 {
+                bailout = true;
+                new_mobiums = 100; // TODO: magic number?
+            }
         }
 
         // Update database record
