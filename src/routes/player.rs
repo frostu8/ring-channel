@@ -82,7 +82,7 @@ pub async fn register(
 
     if let Some(player) = player_query {
         // a player exists already, we just need to update them
-        if player.display_name != player.display_name {
+        if player.display_name != request.display_name {
             sqlx::query(
                 r#"
                 UPDATE player
