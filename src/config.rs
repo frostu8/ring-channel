@@ -2,6 +2,7 @@
 
 use std::path::Path;
 
+use chrono::TimeDelta;
 use figment::{
     Figment,
     providers::{Env, Format, Serialized, Toml},
@@ -17,6 +18,8 @@ use anyhow::Error;
 pub struct Config {
     /// General server configuration.
     pub server: ServerConfig,
+    /// Mmr config.
+    pub mmr: MmrConfig,
     /// HTTP server configuration.
     pub http: HttpConfig,
     /// Discord configuration.
@@ -82,6 +85,58 @@ impl Default for WagerBotConfig {
             display_name: "Metal Sonic".into(),
             avatar: None,
             wager_amount: 400,
+        }
+    }
+}
+
+/// Configuration for MMR.
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct MmrConfig {
+    /// Enables MMR.
+    pub enabled: bool,
+    /// The rating period.
+    ///
+    /// This should be set to a reasonable value for a single player to get at
+    /// least 10 matches in, but it shouldn't be too high.
+    pub period: TimeDelta,
+    /// Constrains the change in volatility over time.
+    ///
+    /// Higher values may make skill volatility change more frequently, and
+    /// lower values make it stay around the same.
+    ///
+    /// See the [Glicko-2] paper for more.
+    ///
+    /// [Glicko-2]: https://www.glicko.net/glicko/glicko2.pdf
+    pub tau: f32,
+    /// Default settings for new players.
+    pub defaults: PlayerRatingDefaults,
+}
+
+impl Default for MmrConfig {
+    fn default() -> Self {
+        MmrConfig {
+            enabled: true,
+            period: TimeDelta::weeks(2),
+            tau: 0.5,
+            defaults: PlayerRatingDefaults::default(),
+        }
+    }
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct PlayerRatingDefaults {
+    /// The rating new players start at.
+    pub rating: f32,
+    pub deviation: f32,
+    pub volatility: f32,
+}
+
+impl Default for PlayerRatingDefaults {
+    fn default() -> Self {
+        PlayerRatingDefaults {
+            rating: 1500.0,
+            deviation: 350.0,
+            volatility: 0.06,
         }
     }
 }

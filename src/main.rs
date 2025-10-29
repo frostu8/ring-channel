@@ -5,7 +5,7 @@ use http::{HeaderValue, Method, header};
 // :(
 use time::Duration;
 
-use clap::Parser;
+use clap::{CommandFactory as _, Parser};
 
 use axum::{
     Router,
@@ -20,7 +20,7 @@ use axum_server::Handle;
 use ring_channel::{
     app::{AppError, AppState},
     auth::oauth2::OauthState,
-    cli::{Args, Command, register_server},
+    cli::{self, Args, Command, MmrCommand, MmrDump},
     config::read_config,
     room, routes,
 };
@@ -88,7 +88,7 @@ async fn main() -> Result<(), Error> {
 
                 tracing::info!("registering server {}", server.server_name);
 
-                register_server(server, &mut tx).await?;
+                cli::register_server(server, &mut tx).await?;
 
                 tx.commit().await?;
                 conn.close().await?;
@@ -99,6 +99,39 @@ async fn main() -> Result<(), Error> {
                 let key = Key::generate();
                 let key = base16::encode_lower(key.master());
                 println!("{}", key);
+            }
+            Command::Mmr(cli::Mmr {
+                command: Some(MmrCommand::Dump(MmrDump { exclude })),
+            }) => {
+                // establish connection
+                let mut conn = SqliteConnection::connect(&database_url).await?;
+                let mut tx = conn.begin().await?;
+
+                // delete excluded participants
+                for id in exclude {
+                    sqlx::query(
+                        r#"
+                        DELETE FROM participant
+                        WHERE player_id IN (
+                            SELECT id
+                            FROM player
+                            WHERE short_id = $1
+                        )
+                        "#,
+                    )
+                    .bind(id)
+                    .execute(&mut *tx)
+                    .await?;
+                }
+
+                ring_channel::player::mmr::dump_rating(std::io::stdout(), &config.mmr, &mut *tx)
+                    .await?;
+
+                // rollback transaction
+                tx.rollback().await?;
+            }
+            Command::Mmr(cli::Mmr { command: None }) => {
+                Args::command().print_help().unwrap();
             }
         }
 

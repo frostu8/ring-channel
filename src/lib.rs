@@ -7,6 +7,7 @@ pub mod auth;
 pub mod battle;
 pub mod cli;
 pub mod config;
+pub mod player;
 pub mod room;
 pub mod routes;
 pub mod session;

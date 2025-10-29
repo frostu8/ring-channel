@@ -30,6 +30,8 @@ pub enum Command {
     RegisterServer(RegisterServer),
     #[command(name = "generate-key")]
     GenerateKey(GenerateKey),
+    #[command(name = "mmr")]
+    Mmr(Mmr),
 }
 
 /// Registers a server with the ring channel API.
@@ -44,6 +46,28 @@ pub struct RegisterServer {
 /// Does nothing but spit out a key that can be read back by the server later.
 #[derive(clap::Args, Debug)]
 pub struct GenerateKey;
+
+/// Does some Mmr things.
+#[derive(clap::Args, Debug)]
+pub struct Mmr {
+    /// The command to run.
+    #[command(subcommand)]
+    pub command: Option<MmrCommand>,
+}
+
+#[derive(Subcommand, Debug)]
+pub enum MmrCommand {
+    #[command(name = "dump")]
+    Dump(MmrDump),
+}
+
+/// Sample's a given player's MMR.
+#[derive(clap::Args, Debug)]
+pub struct MmrDump {
+    /// Exclude certain short IDs.
+    #[arg(short, long)]
+    pub exclude: Vec<String>,
+}
 
 /// Registers a server.
 pub async fn register_server(
