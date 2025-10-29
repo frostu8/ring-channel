@@ -41,6 +41,7 @@ pub async fn update(
         no_contest: Option<bool>,
         finish_time: Option<i32>,
         display_name: String,
+        rating: Option<f32>,
     }
 
     // find match first
@@ -72,15 +73,21 @@ pub async fn update(
             pt.no_contest,
             pt.team,
             pt.finish_time,
-            p.display_name
+            p.display_name,
+            r.rating
         FROM
             player p
         LEFT OUTER JOIN
             participant pt
             ON pt.player_id = p.id
+        LEFT OUTER JOIN
+            rating r
+            ON p.id = r.player_id
         WHERE
             p.short_id = $1
             AND pt.match_id = $2
+        ORDER BY r.inserted_at DESC
+        LIMIT 1
         "#,
     )
     .bind(&short_id)
@@ -129,6 +136,7 @@ pub async fn update(
     Ok(AppJson(Participant {
         player: Player {
             id: short_id,
+            mmr: participant.rating.map(|r| r as i32),
             public_key: None,
             display_name: participant.display_name,
         },

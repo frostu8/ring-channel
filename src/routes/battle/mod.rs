@@ -134,6 +134,7 @@ pub async fn create(
         id: i32,
         short_id: String,
         display_name: String,
+        rating: Option<f32>,
     }
 
     let uuid = Uuid::new_v4();
@@ -166,9 +167,14 @@ pub async fn create(
         // find player
         let player = sqlx::query_as::<_, PlayerQuery>(
             r#"
-            SELECT id, short_id, display_name
-            FROM player
+            SELECT p.id, p.short_id, p.display_name, r.rating
+            FROM player p
+            LEFT OUTER JOIN
+                rating r
+                ON p.id = r.player_id
             WHERE short_id = $1
+            ORDER BY r.inserted_at DESC
+            LIMIT 1
             "#,
         )
         .bind(&input_player.id)
@@ -194,6 +200,7 @@ pub async fn create(
             participants.push(Participant {
                 player: Player {
                     id: player.short_id,
+                    mmr: player.rating.map(|r| r as i32),
                     public_key: None,
                     display_name: player.display_name,
                 },
@@ -373,6 +380,7 @@ pub async fn preload_participants(
     struct ParticipantsQuery {
         short_id: String,
         display_name: String,
+        rating: Option<f32>,
         #[sqlx(try_from = "u8")]
         team: PlayerTeam,
         finish_time: Option<i32>,
@@ -386,13 +394,24 @@ pub async fn preload_participants(
             p.display_name,
             pt.team,
             pt.finish_time,
-            pt.no_contest
+            pt.no_contest,
+            r.rating
         FROM
             participant pt, battle b, player p
+        LEFT OUTER JOIN
+            rating r
+            ON p.id = r.player_id
         WHERE
             pt.match_id = b.id
             AND pt.player_id = p.id
             AND b.uuid = $1
+            AND (r.id IS NULL OR r.id IN (
+                SELECT id
+                FROM rating r
+                WHERE r.id = pt.player_id
+                ORDER BY r.inserted_at DESC
+                LIMIT 1
+            ))
         "#,
     )
     .bind(&battle.id)
@@ -404,6 +423,7 @@ pub async fn preload_participants(
         .map(|p| Participant {
             player: Player {
                 id: p.short_id,
+                mmr: p.rating.map(|r| r as i32),
                 display_name: p.display_name,
                 public_key: None,
             },

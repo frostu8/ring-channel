@@ -30,11 +30,19 @@ pub async fn show(
     #[derive(FromRow)]
     struct PlayerQuery {
         display_name: String,
+        rating: Option<f32>,
     }
 
     let player = sqlx::query_as::<_, PlayerQuery>(
         r#"
-        SELECT display_name FROM player WHERE short_id = $1
+        SELECT p.display_name, r.rating
+        FROM player p
+        LEFT OUTER JOIN
+            rating r
+            ON p.id = r.player_id
+        WHERE p.short_id = $1
+        ORDER BY r.inserted_at DESC
+        LIMIT 1
         "#,
     )
     .bind(&short_id)
@@ -44,6 +52,7 @@ pub async fn show(
 
     Ok(AppJson(Player {
         id: short_id,
+        mmr: player.rating.map(|r| r as i32),
         display_name: player.display_name,
         public_key: None,
     }))
@@ -62,6 +71,7 @@ pub async fn register(
     struct UpsertQuery {
         short_id: String,
         display_name: String,
+        rating: Option<f32>,
     }
 
     let mut tx = state.db.begin().await?;
@@ -71,16 +81,21 @@ pub async fn register(
     // find existing player
     let player_query = sqlx::query_as::<_, UpsertQuery>(
         r#"
-        SELECT short_id, display_name
-        FROM player
-        WHERE public_key = $1
+        SELECT p.short_id, p.display_name, r.rating
+        FROM player p
+        LEFT OUTER JOIN
+            rating r
+            ON p.id = r.player_id
+        WHERE p.public_key = $1
+        ORDER BY r.inserted_at DESC
+        LIMIT 1
         "#,
     )
     .bind(request.public_key.as_str())
     .fetch_optional(&mut *tx)
     .await?;
 
-    if let Some(player) = player_query {
+    if let Some(mut player) = player_query {
         // a player exists already, we just need to update them
         if player.display_name != request.display_name {
             sqlx::query(
@@ -95,6 +110,8 @@ pub async fn register(
             .bind(now)
             .execute(&mut *tx)
             .await?;
+
+            player.display_name = request.display_name.clone();
         }
 
         tx.commit().await?;
@@ -104,6 +121,7 @@ pub async fn register(
             StatusCode::CREATED,
             AppJson(Player {
                 id: player.short_id,
+                mmr: player.rating.map(|r| r as i32),
                 display_name: player.display_name,
                 public_key: Some(request.public_key),
             }),
@@ -126,7 +144,7 @@ pub async fn register(
                 r#"
                 INSERT INTO player (short_id, public_key, display_name, inserted_at, updated_at)
                 VALUES ($1, $2, $3, $4, $4)
-                RETURNING short_id, display_name
+                RETURNING short_id, display_name, NULL AS rating
                 "#,
             )
             .bind(&short_id)
@@ -163,6 +181,7 @@ pub async fn register(
                 StatusCode::CREATED,
                 AppJson(Player {
                     id: player.short_id,
+                    mmr: player.rating.map(|r| r as i32),
                     display_name: player.display_name,
                     public_key: Some(request.public_key),
                 }),
