@@ -239,3 +239,70 @@ fn to_glicko2(player: &PlayerRating) -> (f32, f32) {
 
     (mu, phi)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use chrono::Utc;
+
+    fn new_player_rating() -> PlayerRating {
+        PlayerRating {
+            player_id: 1,
+            period_id: 1,
+            rating: 1500.0,
+            deviation: 350.0,
+            volatility: 0.06,
+            inserted_at: Utc::now(),
+        }
+    }
+
+    /// Test taken directly from the Glicko-2 specification.
+    /// <https://www.glicko.net/glicko/glicko2.pdf>
+    #[test]
+    fn test_glicko2() {
+        let config = MmrConfig::default();
+
+        let player = PlayerRating {
+            rating: 1500.0,
+            deviation: 200.0,
+            volatility: 0.06,
+            ..new_player_rating()
+        };
+
+        let matchups = vec![
+            Matchup {
+                opponent: PlayerRating {
+                    rating: 1400.0,
+                    deviation: 30.0,
+                    volatility: 0.06,
+                    ..new_player_rating()
+                },
+                outcome: Outcome::Win,
+            },
+            Matchup {
+                opponent: PlayerRating {
+                    rating: 1550.0,
+                    deviation: 100.0,
+                    volatility: 0.06,
+                    ..new_player_rating()
+                },
+                outcome: Outcome::Lose,
+            },
+            Matchup {
+                opponent: PlayerRating {
+                    rating: 1700.0,
+                    deviation: 300.0,
+                    volatility: 0.06,
+                    ..new_player_rating()
+                },
+                outcome: Outcome::Lose,
+            },
+        ];
+
+        let rating = rate(&config, &player, &matchups, 1.0);
+
+        assert!((rating.rating - 1464.06).abs() < 0.01);
+        assert!((rating.deviation - 151.52).abs() < 0.01);
+        assert!((rating.volatility * 1_000_000.0 - 0_059_990.0).abs() < 0_000_010.0);
+    }
+}
