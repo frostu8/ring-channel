@@ -116,7 +116,9 @@ impl Default for MmrConfig {
     fn default() -> Self {
         MmrConfig {
             enabled: true,
-            period: TimeDelta::weeks(2),
+            // period: TimeDelta::weeks(2),
+            // lol
+            period: TimeDelta::days(1),
             tau: 0.5,
             defaults: PlayerRatingDefaults::default(),
         }

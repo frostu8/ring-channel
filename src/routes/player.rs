@@ -17,6 +17,7 @@ use tracing::instrument;
 use crate::{
     app::{AppError, AppJson, AppState, Payload, error::AppErrorKind},
     auth::api_key::ServerAuthentication,
+    player::mmr::init_rating,
 };
 
 pub const MAX_INSERT_ATTEMPTS: usize = 25;
@@ -30,19 +31,14 @@ pub async fn show(
     #[derive(FromRow)]
     struct PlayerQuery {
         display_name: String,
-        rating: Option<f32>,
+        rating: f32,
     }
 
     let player = sqlx::query_as::<_, PlayerQuery>(
         r#"
-        SELECT p.display_name, r.rating
-        FROM player p
-        LEFT OUTER JOIN
-            rating r
-            ON p.id = r.player_id
-        WHERE p.short_id = $1
-        ORDER BY r.inserted_at DESC
-        LIMIT 1
+        SELECT display_name, rating
+        FROM player
+        WHERE short_id = $1
         "#,
     )
     .bind(&short_id)
@@ -52,7 +48,7 @@ pub async fn show(
 
     Ok(AppJson(Player {
         id: short_id,
-        mmr: player.rating.map(|r| r as i32),
+        mmr: player.rating as i32,
         display_name: player.display_name,
         public_key: None,
     }))
@@ -69,9 +65,10 @@ pub async fn register(
 ) -> Result<(StatusCode, AppJson<Player>), AppError> {
     #[derive(FromRow)]
     struct UpsertQuery {
+        id: i32,
         short_id: String,
         display_name: String,
-        rating: Option<f32>,
+        rating: f32,
     }
 
     let mut tx = state.db.begin().await?;
@@ -81,14 +78,9 @@ pub async fn register(
     // find existing player
     let player_query = sqlx::query_as::<_, UpsertQuery>(
         r#"
-        SELECT p.short_id, p.display_name, r.rating
-        FROM player p
-        LEFT OUTER JOIN
-            rating r
-            ON p.id = r.player_id
-        WHERE p.public_key = $1
-        ORDER BY r.inserted_at DESC
-        LIMIT 1
+        SELECT id, short_id, display_name, rating
+        FROM player
+        WHERE public_key = $1
         "#,
     )
     .bind(request.public_key.as_str())
@@ -121,7 +113,7 @@ pub async fn register(
             StatusCode::CREATED,
             AppJson(Player {
                 id: player.short_id,
-                mmr: player.rating.map(|r| r as i32),
+                mmr: player.rating as i32,
                 display_name: player.display_name,
                 public_key: Some(request.public_key),
             }),
@@ -142,15 +134,28 @@ pub async fn register(
             // try to insert with short_id
             let result = sqlx::query_as::<_, UpsertQuery>(
                 r#"
-                INSERT INTO player (short_id, public_key, display_name, inserted_at, updated_at)
-                VALUES ($1, $2, $3, $4, $4)
-                RETURNING short_id, display_name, NULL AS rating
+                INSERT INTO player
+                    (
+                        short_id,
+                        public_key,
+                        display_name,
+                        rating,
+                        deviation,
+                        volatility,
+                        inserted_at,
+                        updated_at
+                    )
+                VALUES ($1, $2, $3, $5, $6, $7, $4, $4)
+                RETURNING id, short_id, display_name, rating
                 "#,
             )
             .bind(&short_id)
             .bind(request.public_key.as_str())
             .bind(&request.display_name)
             .bind(now)
+            .bind(state.config.mmr.defaults.rating)
+            .bind(state.config.mmr.defaults.deviation)
+            .bind(state.config.mmr.defaults.volatility)
             .fetch_one(&mut *tx)
             .await;
 
@@ -174,14 +179,17 @@ pub async fn register(
             }
         }
 
-        tx.commit().await?;
-
         if let Some(player) = inserted_player {
+            // Add a historic rating for glicko2 to work
+            init_rating(player.id, &state.config.mmr, &mut *tx).await?;
+
+            tx.commit().await?;
+
             Ok((
                 StatusCode::CREATED,
                 AppJson(Player {
                     id: player.short_id,
-                    mmr: player.rating.map(|r| r as i32),
+                    mmr: player.rating.trunc() as i32,
                     display_name: player.display_name,
                     public_key: Some(request.public_key),
                 }),

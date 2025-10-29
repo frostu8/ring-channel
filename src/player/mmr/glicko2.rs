@@ -6,7 +6,7 @@ use std::f32::consts::PI;
 
 use crate::config::MmrConfig;
 
-use super::PlayerRating;
+use super::{CurrentPlayerRating, PlayerRating};
 
 pub const CONVERGENCE_TOLERANCE: f32 = 0.000_001;
 
@@ -34,7 +34,7 @@ pub fn rate(
     player: &PlayerRating,
     matches: &[Matchup],
     fractional_period: f32,
-) -> PlayerRating {
+) -> CurrentPlayerRating {
     assert!((0f32..=1f32).contains(&fractional_period));
 
     // Step 1 has already been done for us in the database.
@@ -44,12 +44,11 @@ pub fn rate(
 
     if matches.len() == 0 {
         // If the player didn't play any matches, only Step 6 applies.
-        let new_deviation =
-            calculate_pre_rating_period_value(player.volatility, phi, fractional_period);
+        let new_phi = calculate_pre_rating_period_value(player.volatility, phi, fractional_period);
 
-        return PlayerRating {
-            deviation: new_deviation,
-            ..player.clone()
+        return CurrentPlayerRating {
+            deviation: new_phi * 173.7178,
+            ..CurrentPlayerRating::from(player.clone())
         };
     }
 
@@ -101,13 +100,11 @@ pub fn rate(
         .recip();
     let new_mu = new_phi.powi(2).mul_add(scores, mu);
 
-    PlayerRating {
+    CurrentPlayerRating {
         player_id: player.player_id,
         rating: new_mu.mul_add(173.7178, 1500.0),
         deviation: new_phi * 173.7178,
         volatility: new_volatility,
-        inserted_at: player.inserted_at,
-        updated_at: player.updated_at,
     }
 }
 

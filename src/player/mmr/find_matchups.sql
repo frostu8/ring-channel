@@ -28,7 +28,7 @@ WHERE
         SELECT id
         FROM rating ri
         WHERE ri.player_id = op.player_id
-        ORDER BY ri.updated_at DESC
+        ORDER BY ri.inserted_at DESC
     )
 -- Group by battles to count how many we are ahead
 GROUP BY b.id, b.status, b.inserted_at, me.no_contest

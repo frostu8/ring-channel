@@ -31,6 +31,7 @@ use crate::{
     app::{AppError, AppForm, AppGarde, AppJson, AppState, Payload, error::AppErrorKind},
     auth::api_key::ServerAuthentication,
     battle::{BattleSchema, calculate_winnings},
+    player::mmr::{PlayerRating, update_rating},
     room::BattleData,
 };
 
@@ -134,7 +135,7 @@ pub async fn create(
         id: i32,
         short_id: String,
         display_name: String,
-        rating: Option<f32>,
+        rating: f32,
     }
 
     let uuid = Uuid::new_v4();
@@ -167,14 +168,9 @@ pub async fn create(
         // find player
         let player = sqlx::query_as::<_, PlayerQuery>(
             r#"
-            SELECT p.id, p.short_id, p.display_name, r.rating
+            SELECT p.id, p.short_id, p.display_name, p.rating
             FROM player p
-            LEFT OUTER JOIN
-                rating r
-                ON p.id = r.player_id
             WHERE short_id = $1
-            ORDER BY r.inserted_at DESC
-            LIMIT 1
             "#,
         )
         .bind(&input_player.id)
@@ -200,7 +196,7 @@ pub async fn create(
             participants.push(Participant {
                 player: Player {
                     id: player.short_id,
-                    mmr: player.rating.map(|r| r as i32),
+                    mmr: player.rating as i32,
                     public_key: None,
                     display_name: player.display_name,
                 },
@@ -345,6 +341,36 @@ pub async fn update(
     .execute(&mut *tx)
     .await?;
 
+    if request.status == Some(BattleStatus::Concluded)
+        || request.status == Some(BattleStatus::Cancelled)
+    {
+        // update ratings for all players
+        let ratings = sqlx::query_as::<_, PlayerRating>(
+            r#"
+            SELECT r.*, pl.id
+            FROM participant p, player pl, rating r
+            WHERE
+                p.player_id = pl.id
+                AND r.player_id = pl.id
+                AND p.match_id = $1
+                AND r.id IN (
+                    SELECT id
+                    FROM rating
+                    WHERE player_id = pl.id
+                    ORDER BY inserted_at DESC
+                    LIMIT 1
+                )
+            "#,
+        )
+        .bind(battle_query.id)
+        .fetch_all(&mut *tx)
+        .await?;
+
+        for rating in ratings {
+            update_rating(&rating, &state.config.mmr, &mut *tx).await?;
+        }
+    }
+
     // Create battle struct
     let mut battle = Battle::from(&battle_query.schema);
 
@@ -360,7 +386,7 @@ pub async fn update(
         .await;
 
     if request.status == Some(BattleStatus::Concluded) {
-        // close the match!
+        // distribute pots!
         calculate_winnings(battle_query.id, &state.room, &mut *tx).await?;
     }
 
@@ -380,7 +406,7 @@ pub async fn preload_participants(
     struct ParticipantsQuery {
         short_id: String,
         display_name: String,
-        rating: Option<f32>,
+        rating: f32,
         #[sqlx(try_from = "u8")]
         team: PlayerTeam,
         finish_time: Option<i32>,
@@ -395,23 +421,13 @@ pub async fn preload_participants(
             pt.team,
             pt.finish_time,
             pt.no_contest,
-            r.rating
+            p.rating
         FROM
             participant pt, battle b, player p
-        LEFT OUTER JOIN
-            rating r
-            ON p.id = r.player_id
         WHERE
             pt.match_id = b.id
             AND pt.player_id = p.id
             AND b.uuid = $1
-            AND (r.id IS NULL OR r.id IN (
-                SELECT id
-                FROM rating r
-                WHERE r.id = pt.player_id
-                ORDER BY r.inserted_at DESC
-                LIMIT 1
-            ))
         "#,
     )
     .bind(&battle.id)
@@ -423,7 +439,7 @@ pub async fn preload_participants(
         .map(|p| Participant {
             player: Player {
                 id: p.short_id,
-                mmr: p.rating.map(|r| r as i32),
+                mmr: p.rating as i32,
                 display_name: p.display_name,
                 public_key: None,
             },

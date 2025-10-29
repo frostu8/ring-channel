@@ -14,6 +14,7 @@ use crate::{app::AppError, config::MmrConfig};
 /// The rating period.
 #[derive(Clone, Debug, FromRow)]
 pub struct RatingPeriod {
+    pub id: i32,
     #[sqlx(rename = "inserted_at")]
     pub started_at: DateTime<Utc>,
     #[sqlx(skip)]
@@ -22,9 +23,25 @@ pub struct RatingPeriod {
 
 /// A single player rating.
 #[derive(Clone, Debug, FromRow)]
+pub struct CurrentPlayerRating {
+    /// The id of the player this is for.
+    #[sqlx(rename = "id")]
+    pub player_id: i32,
+    /// The player's actual rating.
+    pub rating: f32,
+    /// The rating deviation of the player.
+    pub deviation: f32,
+    /// The player's "skill volatility." Only applies to Glicko-2.
+    pub volatility: f32,
+}
+
+/// A historic player rating.
+#[derive(Clone, Debug, FromRow)]
 pub struct PlayerRating {
     /// The id of the player this is for.
     pub player_id: i32,
+    /// The period this rating belongs to.
+    pub period_id: i32,
     /// The player's actual rating.
     pub rating: f32,
     /// The rating deviation of the player.
@@ -33,25 +50,39 @@ pub struct PlayerRating {
     pub volatility: f32,
     /// When the rating period started for this player.
     pub inserted_at: DateTime<Utc>,
-    pub updated_at: DateTime<Utc>,
 }
 
-/// Inserts a player rating.
-async fn insert_rating(rating: &PlayerRating, conn: &mut SqliteConnection) -> Result<(), AppError> {
+impl From<PlayerRating> for CurrentPlayerRating {
+    fn from(value: PlayerRating) -> Self {
+        CurrentPlayerRating {
+            player_id: value.player_id,
+            rating: value.rating,
+            deviation: value.deviation,
+            volatility: value.volatility,
+        }
+    }
+}
+
+/// Catalogs a player rating.
+async fn catalog_rating(
+    period: &RatingPeriod,
+    rating: &CurrentPlayerRating,
+    conn: &mut SqliteConnection,
+) -> Result<(), AppError> {
     sqlx::query(
         r#"
         INSERT INTO rating
-            (player_id, rating, deviation, volatility, inserted_at, updated_at)
+            (player_id, period_id, rating, deviation, volatility, inserted_at)
         VALUES
             ($1, $2, $3, $4, $5, $6)
         "#,
     )
     .bind(rating.player_id)
+    .bind(period.id)
     .bind(rating.rating)
     .bind(rating.deviation)
     .bind(rating.volatility)
-    .bind(rating.inserted_at)
-    .bind(rating.updated_at)
+    .bind(period.started_at)
     .execute(&mut *conn)
     .await
     .map(|_| ())
@@ -63,55 +94,64 @@ pub async fn init_rating(
     player_id: i32,
     config: &MmrConfig,
     conn: &mut SqliteConnection,
-) -> Result<PlayerRating, AppError> {
+) -> Result<(), AppError> {
     let now = Utc::now();
 
-    // create a new default rating for this player
-    let rating = PlayerRating {
-        player_id,
-        rating: config.defaults.rating,
-        deviation: config.defaults.deviation,
-        volatility: config.defaults.volatility,
-        inserted_at: now,
-        updated_at: now,
-    };
-
-    insert_rating(&rating, conn).await?;
-
-    Ok(rating)
-}
-
-/// Gets a player's rating.
-pub async fn get_rating(
-    player_id: i32,
-    conn: &mut SqliteConnection,
-) -> Result<Option<PlayerRating>, AppError> {
-    sqlx::query_as::<_, PlayerRating>(
+    let result = sqlx::query(
         r#"
-        SELECT *
-        FROM rating
-        WHERE player_id = $1
+        INSERT INTO rating
+            (period_id, player_id, rating, deviation, volatility, inserted_at)
+        SELECT
+            p.id, $1, $2, $3, $4, $5
+        FROM
+            rating_period p
         ORDER BY inserted_at DESC
         LIMIT 1
         "#,
     )
     .bind(player_id)
-    .fetch_optional(&mut *conn)
-    .await
-    .map_err(AppError::from)
-}
+    .bind(config.defaults.rating)
+    .bind(config.defaults.deviation)
+    .bind(config.defaults.volatility)
+    .bind(now)
+    .execute(&mut *conn)
+    .await?;
 
-/// Gets a player's rating, or initializes it to default if it does not exist.
-pub async fn get_rating_or_init(
-    player_id: i32,
-    config: &MmrConfig,
-    conn: &mut SqliteConnection,
-) -> Result<PlayerRating, AppError> {
-    // Get the player's record, or insert it if it doesn't exist.
-    let rating = get_rating(player_id, conn).await?;
-    match rating {
-        Some(rating) => Ok(rating),
-        None => init_rating(player_id, config, &mut *conn).await,
+    if result.rows_affected() > 0 {
+        Ok(())
+    } else {
+        // make a new rating period and use that id instead
+        let period = sqlx::query_as::<_, RatingPeriod>(
+            r#"
+            INSERT INTO rating_period (inserted_at)
+            VALUES ($1)
+            RETURNING id, inserted_at
+            "#,
+        )
+        .bind(now)
+        .fetch_one(&mut *conn)
+        .await?;
+
+        tracing::info!(?period, "no mmr logged! creating a new period now...!");
+
+        sqlx::query(
+            r#"
+            INSERT INTO rating
+                (period_id, player_id, rating, deviation, volatility, inserted_at, updated_at)
+            VALUES
+                ($1, $2, $3, $4, $5, $6, $6)
+            "#,
+        )
+        .bind(period.id)
+        .bind(player_id)
+        .bind(config.defaults.rating)
+        .bind(config.defaults.deviation)
+        .bind(config.defaults.volatility)
+        .bind(now)
+        .execute(&mut *conn)
+        .await?;
+
+        Ok(())
     }
 }
 
@@ -125,7 +165,7 @@ pub async fn update_rating(
     rating: &PlayerRating,
     config: &MmrConfig,
     conn: &mut SqliteConnection,
-) -> Result<PlayerRating, AppError> {
+) -> Result<CurrentPlayerRating, AppError> {
     let now = Utc::now();
 
     // Get the current period start
@@ -148,75 +188,25 @@ pub async fn update_rating(
     // Get the player's new rating
     let new_rating = glicko2::rate(config, rating, &matchups, period.period_elapsed);
 
+    tracing::debug!(?new_rating, "updating rating for");
+
     // Update the rating in-database
     sqlx::query(
         r#"
-        UPDATE rating
-        SET
-            rating = $2,
-            deviation = $3,
-            volatility = $4,
-            updated_at = $5
-        WHERE
-            id IN (
-                SELECT id
-                FROM rating
-                WHERE player_id = $1
-                ORDER BY inserted_at DESC
-                LIMIT 1
-            )
+        UPDATE player
+        SET rating = $2, deviation = $3, volatility = $4, updated_at = $5
+        WHERE id = $1
         "#,
     )
-    .bind(rating.player_id)
-    .bind(rating.rating)
-    .bind(rating.deviation)
-    .bind(rating.volatility)
+    .bind(new_rating.player_id)
+    .bind(new_rating.rating)
+    .bind(new_rating.deviation)
+    .bind(new_rating.volatility)
     .bind(now)
     .execute(&mut *conn)
     .await?;
 
     Ok(new_rating)
-}
-
-#[derive(FromRow)]
-struct PlayerRatingRollover {
-    player_id: i32,
-    rating: Option<f32>,
-    /// The rating deviation of the player.
-    deviation: Option<f32>,
-    /// The player's "skill volatility." Only applies to Glicko-2.
-    volatility: Option<f32>,
-    /// When the rating period started for this player.
-    inserted_at: Option<DateTime<Utc>>,
-    updated_at: Option<DateTime<Utc>>,
-}
-
-impl PlayerRatingRollover {
-    pub fn rating(&self) -> Option<PlayerRating> {
-        match (
-            self.rating,
-            self.deviation,
-            self.volatility,
-            self.inserted_at,
-            self.updated_at,
-        ) {
-            (
-                Some(rating),
-                Some(deviation),
-                Some(volatility),
-                Some(inserted_at),
-                Some(updated_at),
-            ) => Some(PlayerRating {
-                player_id: self.player_id,
-                rating,
-                deviation,
-                volatility,
-                inserted_at,
-                updated_at,
-            }),
-            _ => None,
-        }
-    }
 }
 
 /// Fetches the last start of the rating period.
@@ -242,56 +232,73 @@ pub async fn next_rating_period(
     .await?;
 
     let Some(mut period) = period else {
-        let period = RatingPeriod {
-            started_at: Utc::now(),
-            period_elapsed: 0.0,
-        };
-
-        tracing::info!(?period, "no mmr logged! creating a new period now...!");
-
-        sqlx::query(
+        let period = sqlx::query_as::<_, RatingPeriod>(
             r#"
             INSERT INTO rating_period (inserted_at)
             VALUES ($1)
+            RETURNING id, inserted_at
             "#,
         )
-        .bind(period.started_at)
-        .execute(&mut *conn)
+        .bind(now)
+        .fetch_one(&mut *conn)
         .await?;
+
+        tracing::info!(?period, "no mmr logged! creating a new period now...!");
 
         return Ok(period);
     };
 
-    let mut started_at = period.started_at;
-
     // Close any pending periods
-    let delta = now - started_at;
+    let delta = now - period.started_at;
     let mut elapsed_periods = delta.as_seconds_f32() / config.period.as_seconds_f32();
 
-    while elapsed_periods >= 1.0 {
-        let ended_at = started_at + config.period;
+    period.period_elapsed = f32::min(elapsed_periods, 1.0);
 
-        let players = sqlx::query_as::<_, PlayerRatingRollover>(
+    while elapsed_periods >= 1.0 {
+        let ended_at = period.started_at + config.period;
+
+        tracing::debug!(
+            ?period,
+            "closing rating period {} - {}",
+            period.started_at,
+            ended_at
+        );
+
+        // Insert a new period into the database
+        let mut new_period = sqlx::query_as::<_, RatingPeriod>(
             r#"
-            SELECT
-                p.id AS player_id, r.rating, r.deviation, r.volatility,
-                r.inserted_at, r.updated_at
-            FROM player p, rating r
-            WHERE
-                inserted_at >= $1
-                AND inserted_at < $2
+            INSERT INTO rating_period (inserted_at)
+            VALUES ($1)
+            RETURNING id, inserted_at
             "#,
         )
-        .bind(started_at)
         .bind(ended_at)
+        .fetch_one(&mut *conn)
+        .await?;
+        new_period.period_elapsed = f32::min(elapsed_periods, 1.0);
+
+        let players = sqlx::query_as::<_, PlayerRating>(
+            r#"
+            SELECT r.*
+            FROM player p, rating r
+            WHERE r.id IN (
+                SELECT id
+                FROM rating r
+                WHERE r.player_id = p.id
+                ORDER BY inserted_at DESC
+                LIMIT 1
+            )
+            "#,
+        )
         .fetch_all(&mut *conn)
         .await?;
 
+        // Update all player's ratings
         for player in players {
             // All players get their rating rolled over if they had one.
-            if let Some(rating) = player.rating() {
-                // Fetch the player's matchups
-                let matchups = fetch_matchups(player.player_id, started_at, ended_at, &mut *conn)
+            // Fetch the player's matchups
+            let matchups =
+                fetch_matchups(player.player_id, period.started_at, ended_at, &mut *conn)
                     .await?
                     .into_iter()
                     .map(|matchup| glicko2::Matchup {
@@ -304,39 +311,34 @@ pub async fn next_rating_period(
                     })
                     .collect::<Vec<_>>();
 
-                // Get the player's new rating
-                let new_rating = glicko2::rate(config, &rating, &matchups, 1.0);
+            // Get the player's new rating
+            let new_rating = glicko2::rate(config, &player, &matchups, 1.0);
 
-                // Insert it into the rating period
-                insert_rating(
-                    &PlayerRating {
-                        inserted_at: started_at,
-                        updated_at: started_at,
-                        ..new_rating
-                    },
-                    &mut *conn,
-                )
-                .await?;
-            }
+            let now = Utc::now();
+
+            // Update the player's existing rating
+            sqlx::query(
+                r#"
+                UPDATE player
+                SET rating = $2, deviation = $3, volatility = $4, updated_at = $5
+                WHERE id = $1
+                "#,
+            )
+            .bind(player.player_id)
+            .bind(player.rating)
+            .bind(player.deviation)
+            .bind(player.volatility)
+            .bind(now)
+            .execute(&mut *conn)
+            .await?;
+
+            // Insert it into the rating period
+            catalog_rating(&new_period, &new_rating, &mut *conn).await?;
         }
 
         // Add started at to continue onto next period
-        started_at = ended_at;
+        period = new_period;
         elapsed_periods -= 1.0;
-
-        // Insert a new period into the database
-        period.started_at = started_at;
-        period.period_elapsed = f32::min(elapsed_periods, 1.0);
-
-        sqlx::query(
-            r#"
-            INSERT INTO rating_period (inserted_at)
-            VALUES ($1)
-            "#,
-        )
-        .bind(period.started_at)
-        .execute(&mut *conn)
-        .await?;
     }
 
     Ok(period)
@@ -376,7 +378,7 @@ pub async fn dump_rating<W: std::io::Write>(
     let from = now - config.period;
 
     // Write header
-    writer.write(b"ID,Player Name,Total Matches,Win/Loss Rate,MMR,X Factor\n")?;
+    writer.write(b"ID,Player Name,Total Matches,Win/Loss Rate,MMR,Deviation,X Factor\n")?;
 
     let players = sqlx::query_as::<_, (i32, String, String)>(
         r#"
@@ -390,20 +392,22 @@ pub async fn dump_rating<W: std::io::Write>(
         // Get the player's record, or insert it if it doesn't exist.
         let rating = sqlx::query_as::<_, PlayerRating>(
             r#"
-            SELECT * FROM rating WHERE player_id = $1
+            SELECT r.*
+            FROM player p, rating r
+            WHERE
+                p.id = $1
+                AND r.id IN (
+                    SELECT id
+                    FROM rating r
+                    WHERE r.player_id = p.id
+                    ORDER BY inserted_at DESC
+                    LIMIT 1
+                )
             "#,
         )
         .bind(player_id)
-        .fetch_optional(&mut *conn)
-        .await?
-        .unwrap_or_else(|| PlayerRating {
-            player_id,
-            rating: config.defaults.rating,
-            deviation: config.defaults.deviation,
-            volatility: config.defaults.volatility,
-            inserted_at: now,
-            updated_at: now,
-        });
+        .fetch_one(&mut *conn)
+        .await?;
 
         let matchups = fetch_matchups(player_id, from, now, &mut *conn).await?;
 
@@ -435,12 +439,13 @@ pub async fn dump_rating<W: std::io::Write>(
 
             write!(
                 writer,
-                "{},\"{}\",{},{:.2}%,{},{}\n",
+                "{},\"{}\",{},{:.2}%,{},{},{}\n",
                 short_id,
                 csv_name,
                 matchups.len(),
                 wl_rate * 100.0,
                 new_rating.rating,
+                new_rating.deviation,
                 new_rating.volatility
             )?;
         }

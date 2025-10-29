@@ -17,9 +17,7 @@ pub struct Player {
     /// The last display name used by the player.
     pub display_name: String,
     /// The player's MMR.
-    ///
-    /// If they haven't played a single match yet, this may not be present.
-    pub mmr: Option<i32>,
+    pub mmr: i32,
     /// The public rrid of the player.
     ///
     /// The base16 encoded public key of the player, which is a 64-character
