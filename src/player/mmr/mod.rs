@@ -325,9 +325,9 @@ pub async fn next_rating_period(
                 "#,
             )
             .bind(player.player_id)
-            .bind(player.rating)
-            .bind(player.deviation)
-            .bind(player.volatility)
+            .bind(new_rating.rating)
+            .bind(new_rating.deviation)
+            .bind(new_rating.volatility)
             .bind(now)
             .execute(&mut *conn)
             .await?;
