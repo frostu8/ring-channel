@@ -392,8 +392,8 @@ async fn rebalance_automated_wagers(
         )
         SELECT
             p.team AS victor,
-            COUNT(w.mobiums > 0) AS wager_count,
-            SUM(w.is_bot_wager) AS bot_wagers
+            SUM(w.mobiums > 0) AS wager_count,
+            SUM(w.is_bot_wager AND w.mobiums > 0) AS bot_wagers
         FROM
             (
                 SELECT DISTINCT p.team
