@@ -116,7 +116,7 @@ impl Default for MmrConfig {
     fn default() -> Self {
         MmrConfig {
             enabled: true,
-            period: TimeDelta::seconds(400_000),
+            period: TimeDelta::seconds(86_400),
             tau: 0.5,
             defaults: PlayerRatingDefaults::default(),
         }
