@@ -137,9 +137,9 @@ pub async fn init_rating(
         sqlx::query(
             r#"
             INSERT INTO rating
-                (period_id, player_id, rating, deviation, volatility, inserted_at, updated_at)
+                (period_id, player_id, rating, deviation, volatility, inserted_at)
             VALUES
-                ($1, $2, $3, $4, $5, $6, $6)
+                ($1, $2, $3, $4, $5, $6)
             "#,
         )
         .bind(period.id)
@@ -188,7 +188,7 @@ pub async fn update_rating(
     // Get the player's new rating
     let new_rating = glicko2::rate(config, rating, &matchups, period.period_elapsed);
 
-    tracing::debug!(?new_rating, "updating rating for");
+    tracing::debug!(?new_rating, "/updating rating for");
 
     // Update the rating in-database
     sqlx::query(

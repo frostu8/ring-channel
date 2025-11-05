@@ -22,6 +22,7 @@ use ring_channel::{
     auth::oauth2::OauthState,
     cli::{self, Args, Command, MmrCommand, MmrDump},
     config::read_config,
+    player::mmr::init_rating,
     room, routes,
 };
 
@@ -99,6 +100,49 @@ async fn main() -> Result<(), Error> {
                 let key = Key::generate();
                 let key = base16::encode_lower(key.master());
                 println!("{}", key);
+            }
+            Command::Mmr(cli::Mmr {
+                command: Some(MmrCommand::Reset(_)),
+            }) => {
+                // establish connection
+                let mut conn = SqliteConnection::connect(&database_url).await?;
+                let mut tx = conn.begin().await?;
+
+                tracing::info!("resetting all mmr...");
+
+                // clear records
+                sqlx::query("DELETE FROM rating").execute(&mut *tx).await?;
+                sqlx::query("DELETE FROM rating_period")
+                    .execute(&mut *tx)
+                    .await?;
+
+                // update all players ratings
+                let player_ids = sqlx::query_as::<_, (i32,)>("SELECT id FROM player")
+                    .fetch_all(&mut *tx)
+                    .await?;
+
+                for (id,) in player_ids {
+                    // reset player's rating
+                    sqlx::query(
+                        r#"
+                        UPDATE player
+                        SET rating = $1, deviation = $2, volatility = $3, updated_at = $5
+                        WHERE id = $4
+                        "#,
+                    )
+                    .bind(config.mmr.defaults.rating)
+                    .bind(config.mmr.defaults.deviation)
+                    .bind(config.mmr.defaults.volatility)
+                    .bind(id)
+                    .bind(chrono::Utc::now())
+                    .execute(&mut *tx)
+                    .await?;
+
+                    // init player rating
+                    init_rating(id, &config.mmr, &mut *tx).await?;
+                }
+
+                tx.commit().await?;
             }
             Command::Mmr(cli::Mmr {
                 command: Some(MmrCommand::Dump(MmrDump { exclude })),

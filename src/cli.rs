@@ -57,6 +57,8 @@ pub struct Mmr {
 
 #[derive(Subcommand, Debug)]
 pub enum MmrCommand {
+    #[command(name = "reset")]
+    Reset(MmrReset),
     #[command(name = "dump")]
     Dump(MmrDump),
 }
@@ -68,6 +70,10 @@ pub struct MmrDump {
     #[arg(short, long)]
     pub exclude: Vec<String>,
 }
+
+/// Resets the MMR of the server.
+#[derive(clap::Args, Debug)]
+pub struct MmrReset;
 
 /// Registers a server.
 pub async fn register_server(
