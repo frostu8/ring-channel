@@ -40,6 +40,9 @@ pub async fn update(
         team: Option<u8>,
         no_contest: Option<bool>,
         finish_time: Option<i32>,
+        skin: Option<String>,
+        kart_speed: Option<i32>,
+        kart_weight: Option<i32>,
         display_name: String,
         rating: f32,
     }
@@ -69,10 +72,7 @@ pub async fn update(
     let participant = sqlx::query_as::<_, ParticipantQuery>(
         r#"
         SELECT
-            pt.id,
-            pt.no_contest,
-            pt.team,
-            pt.finish_time,
+            pt.*,
             p.display_name,
             p.rating
         FROM
@@ -99,8 +99,21 @@ pub async fn update(
     };
 
     // Get non-nullables
-    let (Some(participant_id), Some(team), Some(no_contest)) =
-        (participant.id, participant.team, participant.no_contest)
+    let (
+        Some(participant_id),
+        Some(team),
+        Some(no_contest),
+        Some(skin),
+        Some(kart_speed),
+        Some(kart_weight),
+    ) = (
+        participant.id,
+        participant.team,
+        participant.no_contest,
+        participant.skin,
+        participant.kart_speed,
+        participant.kart_weight,
+    )
     else {
         // the player is not participating!
         return Err(AppError::not_found(format!(
@@ -138,5 +151,8 @@ pub async fn update(
         team: PlayerTeam::try_from(team).map_err(AppError::new)?,
         finish_time: finish_time.or(request.finish_time),
         no_contest,
+        skin,
+        kart_speed,
+        kart_weight,
     }))
 }

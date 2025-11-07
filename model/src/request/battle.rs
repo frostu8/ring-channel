@@ -25,6 +25,12 @@ pub struct CreateBattleParticipant {
     pub id: String,
     /// What team they are on.
     pub team: PlayerTeam,
+    /// The player's kartspeed.
+    pub kart_speed: i32,
+    /// The player's kartweight.
+    pub kart_weight: i32,
+    /// The skin the player is running.
+    pub skin: String,
 }
 
 /// Request to set the placement of a player.

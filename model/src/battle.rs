@@ -46,6 +46,12 @@ pub struct Participant {
     /// If the player no contest'd.
     #[serde(default)]
     pub no_contest: bool,
+    /// The player's kartspeed.
+    pub kart_speed: i32,
+    /// The player's kartweight.
+    pub kart_weight: i32,
+    /// The skin the player is running.
+    pub skin: String,
 }
 
 /// The match's status.

@@ -164,7 +164,7 @@ pub async fn create(
 
     // register players
     let mut participants = Vec::with_capacity(request.participants.len());
-    for input_player in request.participants.iter() {
+    for input_player in request.participants.into_iter() {
         // find player
         let player = sqlx::query_as::<_, PlayerQuery>(
             r#"
@@ -182,13 +182,16 @@ pub async fn create(
             sqlx::query(
                 r#"
                 INSERT INTO participant
-                    (match_id, player_id, team, no_contest)
-                VALUES ($1, $2, $3, FALSE)
+                    (match_id, player_id, team, no_contest, skin, kart_speed, kart_weight)
+                VALUES ($1, $2, $3, FALSE, $4, $5, $6)
                 "#,
             )
             .bind(match_id)
             .bind(player.id)
             .bind(u8::from(input_player.team))
+            .bind(&input_player.skin)
+            .bind(input_player.kart_speed)
+            .bind(input_player.kart_weight)
             .execute(&mut *tx)
             .await?;
 
@@ -203,6 +206,9 @@ pub async fn create(
                 team: input_player.team,
                 finish_time: None,
                 no_contest: false,
+                skin: input_player.skin,
+                kart_speed: input_player.kart_speed,
+                kart_weight: input_player.kart_weight,
             })
         } else {
             tx.rollback().await?;
@@ -411,16 +417,17 @@ pub async fn preload_participants(
         team: PlayerTeam,
         finish_time: Option<i32>,
         no_contest: bool,
+        skin: String,
+        kart_speed: i32,
+        kart_weight: i32,
     }
 
     let participants = sqlx::query_as::<_, ParticipantsQuery>(
         r#"
         SELECT
+            pt.*,
             p.short_id,
             p.display_name,
-            pt.team,
-            pt.finish_time,
-            pt.no_contest,
             p.rating
         FROM
             participant pt, battle b, player p
@@ -446,6 +453,9 @@ pub async fn preload_participants(
             team: p.team,
             finish_time: p.finish_time,
             no_contest: p.no_contest,
+            skin: p.skin,
+            kart_speed: p.kart_speed,
+            kart_weight: p.kart_weight,
         })
         .collect();
 
