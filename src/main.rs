@@ -338,8 +338,6 @@ async fn main() -> Result<(), Error> {
 
             Box::pin(async move {
                 if let Ok(_permit) = semaphore.try_acquire() {
-                    tracing::info!("updating rating periods");
-
                     let mut conn = state.db.acquire().await.expect("conn acquire");
                     let _period = next_rating_period(&state.config.mmr, &mut conn)
                         .await
