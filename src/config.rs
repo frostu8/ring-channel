@@ -10,9 +10,10 @@ use figment::{
     value::Uncased,
 };
 
+use humantime::format_duration;
 use ring_channel_model::user::to_username_lossy;
 
-use serde::{Deserialize, Deserializer, Serialize, de::Error as _};
+use serde::{Deserialize, Deserializer, Serialize, Serializer, de::Error as _};
 
 use anyhow::Error;
 
@@ -101,7 +102,10 @@ pub struct MmrConfig {
     ///
     /// This should be set to a reasonable value for a single player to get at
     /// least 10 matches in, but it shouldn't be too high.
-    #[serde(deserialize_with = "deserialize_duration")]
+    #[serde(
+        deserialize_with = "deserialize_duration",
+        serialize_with = "serialize_duration"
+    )]
     pub period: TimeDelta,
     /// Constrains the change in volatility over time.
     ///
@@ -192,4 +196,13 @@ where
     let duration = humantime::parse_duration(&text).map_err(D::Error::custom)?;
 
     TimeDelta::from_std(duration).map_err(D::Error::custom)
+}
+
+fn serialize_duration<S>(delta: &TimeDelta, serializer: S) -> Result<S::Ok, S::Error>
+where
+    S: Serializer,
+{
+    format_duration(delta.to_std().expect("positive time delta"))
+        .to_string()
+        .serialize(serializer)
 }

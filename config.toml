@@ -6,7 +6,6 @@ bot.enabled = true
 
 [mmr]
 enabled = true
-period = "1d"
 
 [http]
 port = 4000
