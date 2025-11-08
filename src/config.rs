@@ -3,13 +3,16 @@
 use std::path::Path;
 
 use chrono::TimeDelta;
+
 use figment::{
     Figment,
     providers::{Env, Format, Serialized, Toml},
     value::Uncased,
 };
+
 use ring_channel_model::user::to_username_lossy;
-use serde::{Deserialize, Serialize};
+
+use serde::{Deserialize, Deserializer, Serialize, de::Error as _};
 
 use anyhow::Error;
 
@@ -98,6 +101,7 @@ pub struct MmrConfig {
     ///
     /// This should be set to a reasonable value for a single player to get at
     /// least 10 matches in, but it shouldn't be too high.
+    #[serde(deserialize_with = "deserialize_duration")]
     pub period: TimeDelta,
     /// Constrains the change in volatility over time.
     ///
@@ -178,4 +182,14 @@ pub fn read_config(config_file: impl AsRef<Path>) -> Result<Config, Error> {
         }))
         .extract()
         .map_err(From::from)
+}
+
+fn deserialize_duration<'de, D>(deserializer: D) -> Result<TimeDelta, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let text = String::deserialize(deserializer)?;
+    let duration = humantime::parse_duration(&text).map_err(D::Error::custom)?;
+
+    TimeDelta::from_std(duration).map_err(D::Error::custom)
 }
