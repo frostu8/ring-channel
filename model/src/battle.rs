@@ -47,11 +47,14 @@ pub struct Participant {
     #[serde(default)]
     pub no_contest: bool,
     /// The player's kartspeed.
-    pub kart_speed: i32,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub kart_speed: Option<i32>,
     /// The player's kartweight.
-    pub kart_weight: i32,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub kart_weight: Option<i32>,
     /// The skin the player is running.
-    pub skin: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub skin: Option<String>,
 }
 
 /// The match's status.

@@ -206,9 +206,9 @@ pub async fn create(
                 team: input_player.team,
                 finish_time: None,
                 no_contest: false,
-                skin: input_player.skin,
-                kart_speed: input_player.kart_speed,
-                kart_weight: input_player.kart_weight,
+                skin: Some(input_player.skin),
+                kart_speed: Some(input_player.kart_speed),
+                kart_weight: Some(input_player.kart_weight),
             })
         } else {
             tx.rollback().await?;
@@ -417,9 +417,9 @@ pub async fn preload_participants(
         team: PlayerTeam,
         finish_time: Option<i32>,
         no_contest: bool,
-        skin: String,
-        kart_speed: i32,
-        kart_weight: i32,
+        skin: Option<String>,
+        kart_speed: Option<i32>,
+        kart_weight: Option<i32>,
     }
 
     let participants = sqlx::query_as::<_, ParticipantsQuery>(

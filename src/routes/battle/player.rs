@@ -99,21 +99,8 @@ pub async fn update(
     };
 
     // Get non-nullables
-    let (
-        Some(participant_id),
-        Some(team),
-        Some(no_contest),
-        Some(skin),
-        Some(kart_speed),
-        Some(kart_weight),
-    ) = (
-        participant.id,
-        participant.team,
-        participant.no_contest,
-        participant.skin,
-        participant.kart_speed,
-        participant.kart_weight,
-    )
+    let (Some(participant_id), Some(team), Some(no_contest)) =
+        (participant.id, participant.team, participant.no_contest)
     else {
         // the player is not participating!
         return Err(AppError::not_found(format!(
@@ -151,8 +138,8 @@ pub async fn update(
         team: PlayerTeam::try_from(team).map_err(AppError::new)?,
         finish_time: finish_time.or(request.finish_time),
         no_contest,
-        skin,
-        kart_speed,
-        kart_weight,
+        skin: participant.skin,
+        kart_speed: participant.kart_speed,
+        kart_weight: participant.kart_weight,
     }))
 }
