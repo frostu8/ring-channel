@@ -46,6 +46,7 @@ futures-core = "0.3"
 axum-valid = { version = "0.24", default-features = false, features = ["garde", "basic"] }
 garde = { version = "0.22", features = ["derive"] }
 humantime = "2"
+tokio-cron-scheduler = { version = "0.15", features = ["signal"] }
 
 [workspace]
 resolver = "3"

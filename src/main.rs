@@ -22,7 +22,7 @@ use ring_channel::{
     auth::oauth2::OauthState,
     cli::{self, Args, Command, MmrCommand, MmrDump},
     config::read_config,
-    player::mmr::init_rating,
+    player::mmr::{init_rating, next_rating_period},
     room, routes,
 };
 
@@ -30,8 +30,9 @@ use anyhow::Error;
 
 use sqlx::{Connection, SqliteConnection, pool::PoolOptions};
 
-use tokio::{main, select, signal};
+use tokio::{main, select, signal, sync::Semaphore};
 
+use tokio_cron_scheduler::{Job, JobScheduler};
 use tower_http::{
     cors::{Any, CorsLayer},
     trace::TraceLayer,
@@ -248,7 +249,7 @@ async fn main() -> Result<(), Error> {
             "/users",
             Router::<AppState>::new().route("/~me", get(routes::user::show_me)),
         )
-        .with_state(state);
+        .with_state(state.clone());
 
     if let Some(discord_config) = config.discord.as_ref() {
         let oauth_state = OauthState::new(&config.server.base_url, db.clone(), &discord_config)?
@@ -322,6 +323,34 @@ async fn main() -> Result<(), Error> {
 
     // run shutdown task to detect shutdowns
     tokio::spawn(shutdown_signal(handle.clone()));
+
+    // start cron jobs
+    let sched = JobScheduler::new().await?;
+    let state_clone = state.clone();
+
+    // Start the rating period updater
+    // This has to be locked so multiple threads aren't doing this together
+    let semaphore = Arc::new(Semaphore::new(1));
+    sched
+        .add(Job::new_async("1/60 * * * * *", move |_uuid, _l| {
+            let state = state_clone.clone();
+            let semaphore = semaphore.clone();
+
+            Box::pin(async move {
+                if let Ok(_permit) = semaphore.try_acquire() {
+                    tracing::info!("updating rating periods");
+
+                    let mut conn = state.db.acquire().await.expect("conn acquire");
+                    let _period = next_rating_period(&state.config.mmr, &mut conn)
+                        .await
+                        .expect("update period");
+                }
+            })
+        })?)
+        .await?;
+
+    sched.shutdown_on_ctrl_c();
+    sched.start().await?;
 
     let addr: SocketAddr = ([0, 0, 0, 0], config.http.port).into();
 
