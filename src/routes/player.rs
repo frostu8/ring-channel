@@ -17,7 +17,7 @@ use tracing::instrument;
 use crate::{
     app::{AppError, AppJson, AppState, Payload, error::AppErrorKind},
     auth::api_key::ServerAuthentication,
-    player::mmr::init_rating,
+    player::{get_player, mmr::init_rating},
 };
 
 pub const MAX_INSERT_ATTEMPTS: usize = 25;
@@ -28,30 +28,14 @@ pub async fn show(
     Path((short_id,)): Path<(String,)>,
     State(state): State<AppState>,
 ) -> Result<AppJson<Player>, AppError> {
-    #[derive(FromRow)]
-    struct PlayerQuery {
-        display_name: String,
-        rating: f32,
-    }
+    let mut conn = state.db.acquire().await?;
 
-    let player = sqlx::query_as::<_, PlayerQuery>(
-        r#"
-        SELECT display_name, rating
-        FROM player
-        WHERE short_id = $1
-        "#,
-    )
-    .bind(&short_id)
-    .fetch_optional(&state.db)
-    .await?
-    .ok_or_else(|| AppError::not_found(format!("Player {} not found", short_id)))?;
-
-    Ok(AppJson(Player {
-        id: short_id,
-        mmr: player.rating as i32,
-        display_name: player.display_name,
-        public_key: None,
-    }))
+    get_player(&short_id, &mut conn)
+        .await
+        .and_then(|f| {
+            f.ok_or_else(|| AppError::not_found(format!("Player {} not found", short_id)))
+        })
+        .map(|player| AppJson(player.into()))
 }
 
 /// Registers a joined player.

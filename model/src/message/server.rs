@@ -2,7 +2,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::{BattleWager, battle::Battle};
+use crate::{BattleWager, battle::Battle, chat::Message};
 
 /// Heartbeat acknowledgement.
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -10,6 +10,10 @@ pub struct HeartbeatAck {
     /// The sequence number this is acknowledging.
     pub seq: i32,
 }
+
+/// A chat message notification.
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct NewMessage(pub Message);
 
 /// A notification for a new match.
 #[derive(Clone, Debug, Deserialize, Serialize)]

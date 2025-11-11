@@ -246,6 +246,10 @@ async fn main() -> Result<(), Error> {
                 ),
         )
         .nest(
+            "/chat",
+            Router::<AppState>::new().route("/messages", post(routes::chat::create)),
+        )
+        .nest(
             "/users",
             Router::<AppState>::new().route("/~me", get(routes::user::show_me)),
         )

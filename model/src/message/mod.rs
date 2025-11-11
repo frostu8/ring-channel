@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::message::{
     client::Heartbeat,
-    server::{BattleUpdate, HeartbeatAck, MobiumsChange, NewBattle, WagerUpdate},
+    server::{BattleUpdate, HeartbeatAck, MobiumsChange, NewBattle, NewMessage, WagerUpdate},
 };
 
 /// A WebSocket message.
@@ -22,6 +22,8 @@ pub enum Message {
     Heartbeat(Heartbeat),
     /// Response for a [`Message::Heartbeat`].
     HeartbeatAck(HeartbeatAck),
+    /// A new message was sent in the server.
+    NewMessage(NewMessage),
     /// A server notification for a new match.
     NewBattle(NewBattle),
     /// A server notification for a concluded match.

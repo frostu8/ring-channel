@@ -1,6 +1,7 @@
 //! API model representations.
 
 pub mod battle;
+pub mod chat;
 pub mod error;
 pub mod message;
 pub mod player;

@@ -5,9 +5,10 @@
 
 pub mod protocol;
 
-use derive_more::Deref;
 pub use protocol::{Error, WebSocket};
 pub use ring_channel_model::message::Message;
+
+use derive_more::Deref;
 
 use std::sync::Arc;
 
@@ -16,7 +17,8 @@ use futures_util::SinkExt as _;
 use ring_channel_model::{
     Battle, BattleWager,
     battle::Participant,
-    message::server::{BattleUpdate, MobiumsChange, NewBattle, WagerUpdate},
+    chat::Message as ChatMessage,
+    message::server::{BattleUpdate, MobiumsChange, NewBattle, NewMessage, WagerUpdate},
 };
 
 use tokio::sync::{
@@ -81,6 +83,11 @@ impl Room {
         }
     }
 
+    /// Sends a new message in the room.
+    pub async fn send_message(&self, message: ChatMessage) {
+        let _ = self.state.tx.send(RoomEvent::NewMessage { message });
+    }
+
     /// Sets a new match for the room, broadcasting it to all clients.
     pub async fn update_battle(&self, new_battle: BattleData) {
         *self.state.current_battle.write().await = Some(new_battle.clone());
@@ -135,6 +142,9 @@ pub struct Handle {
 
 #[derive(Debug, Clone)]
 enum RoomEvent {
+    NewMessage {
+        message: ChatMessage,
+    },
     UpdateBattle {
         battle: BattleData,
     },
@@ -225,6 +235,9 @@ async fn handle_message(_state: &mut WebSocketState, message: Message) -> Result
 #[instrument(skip(state))]
 async fn handle_server_event(state: &mut WebSocketState, ev: RoomEvent) -> Result<(), Error> {
     match ev {
+        RoomEvent::NewMessage { message } => {
+            state.ws.send(&NewMessage(message).into()).await?;
+        }
         RoomEvent::UpdateBattle { battle } => {
             let old_battle = std::mem::replace(&mut state.battle, Some(battle.clone()));
 
