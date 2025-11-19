@@ -17,7 +17,10 @@ use tracing::instrument;
 use crate::{
     app::{AppError, AppJson, AppState, Payload, error::AppErrorKind},
     auth::api_key::ServerAuthentication,
-    player::{get_player, mmr::init_rating},
+    player::{
+        get_player,
+        mmr::{CurrentPlayerRating, init_rating},
+    },
 };
 
 pub const MAX_INSERT_ATTEMPTS: usize = 25;
@@ -49,10 +52,12 @@ pub async fn register(
 ) -> Result<(StatusCode, AppJson<Player>), AppError> {
     #[derive(FromRow)]
     struct UpsertQuery {
+        #[sqlx(rename = "player_id")]
         id: i32,
         short_id: String,
         display_name: String,
-        rating: f32,
+        #[sqlx(flatten)]
+        rating: CurrentPlayerRating,
     }
 
     let mut tx = state.db.begin().await?;
@@ -62,7 +67,7 @@ pub async fn register(
     // find existing player
     let player_query = sqlx::query_as::<_, UpsertQuery>(
         r#"
-        SELECT id, short_id, display_name, rating
+        SELECT id AS player_id, short_id, display_name, rating, deviation, volatility
         FROM player
         WHERE public_key = $1
         "#,
@@ -97,7 +102,7 @@ pub async fn register(
             StatusCode::CREATED,
             AppJson(Player {
                 id: player.short_id,
-                mmr: player.rating as i32,
+                mmr: player.rating.ordinal() as i32,
                 display_name: player.display_name,
                 public_key: Some(request.public_key),
             }),
@@ -130,7 +135,7 @@ pub async fn register(
                         updated_at
                     )
                 VALUES ($1, $2, $3, $5, $6, $7, $4, $4)
-                RETURNING id, short_id, display_name, rating
+                RETURNING id AS player_id, short_id, display_name, rating, deviation, volatility
                 "#,
             )
             .bind(&short_id)
@@ -173,7 +178,7 @@ pub async fn register(
                 StatusCode::CREATED,
                 AppJson(Player {
                     id: player.short_id,
-                    mmr: player.rating.trunc() as i32,
+                    mmr: player.rating.ordinal() as i32,
                     display_name: player.display_name,
                     public_key: Some(request.public_key),
                 }),
