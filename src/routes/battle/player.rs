@@ -17,6 +17,7 @@ use uuid::Uuid;
 use crate::{
     app::{AppError, AppJson, AppState, Payload, error::AppErrorKind},
     auth::api_key::ServerAuthentication,
+    player::mmr::CurrentPlayerRating,
 };
 
 /// Updates the placement of a player for a given match.
@@ -44,7 +45,8 @@ pub async fn update(
         kart_speed: Option<i32>,
         kart_weight: Option<i32>,
         display_name: String,
-        rating: f32,
+        #[sqlx(flatten)]
+        rating: CurrentPlayerRating,
     }
 
     // find match first
@@ -73,8 +75,11 @@ pub async fn update(
         r#"
         SELECT
             pt.*,
+            p.id AS player_id,
             p.display_name,
-            p.rating
+            p.rating,
+            p.deviation,
+            p.volatility
         FROM
             player p
         LEFT OUTER JOIN
@@ -131,7 +136,7 @@ pub async fn update(
     Ok(AppJson(Participant {
         player: Player {
             id: short_id,
-            mmr: participant.rating as i32,
+            mmr: participant.rating.ordinal() as i32,
             public_key: None,
             display_name: participant.display_name,
         },

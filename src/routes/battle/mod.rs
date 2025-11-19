@@ -31,7 +31,7 @@ use crate::{
     app::{AppError, AppForm, AppGarde, AppJson, AppState, Payload, error::AppErrorKind},
     auth::api_key::ServerAuthentication,
     battle::{BattleSchema, calculate_winnings},
-    player::mmr::{PlayerRating, update_rating},
+    player::mmr::{CurrentPlayerRating, PlayerRating, update_rating},
     room::BattleData,
 };
 
@@ -132,10 +132,12 @@ pub async fn create(
 ) -> Result<(StatusCode, AppJson<Battle>), AppError> {
     #[derive(FromRow)]
     struct PlayerQuery {
+        #[sqlx(rename = "player_id")]
         id: i32,
         short_id: String,
         display_name: String,
-        rating: f32,
+        #[sqlx(flatten)]
+        rating: CurrentPlayerRating,
     }
 
     let uuid = Uuid::new_v4();
@@ -168,7 +170,13 @@ pub async fn create(
         // find player
         let player = sqlx::query_as::<_, PlayerQuery>(
             r#"
-            SELECT p.id, p.short_id, p.display_name, p.rating
+            SELECT
+                p.id AS player_id,
+                p.short_id,
+                p.display_name,
+                p.rating,
+                p.deviation,
+                p.volatility
             FROM player p
             WHERE short_id = $1
             "#,
@@ -199,7 +207,7 @@ pub async fn create(
             participants.push(Participant {
                 player: Player {
                     id: player.short_id,
-                    mmr: player.rating as i32,
+                    mmr: player.rating.ordinal() as i32,
                     public_key: None,
                     display_name: player.display_name,
                 },
@@ -412,7 +420,6 @@ pub async fn preload_participants(
     struct ParticipantsQuery {
         short_id: String,
         display_name: String,
-        rating: f32,
         #[sqlx(try_from = "u8")]
         team: PlayerTeam,
         finish_time: Option<i32>,
@@ -420,15 +427,20 @@ pub async fn preload_participants(
         skin: Option<String>,
         kart_speed: Option<i32>,
         kart_weight: Option<i32>,
+        #[sqlx(flatten)]
+        rating: CurrentPlayerRating,
     }
 
     let participants = sqlx::query_as::<_, ParticipantsQuery>(
         r#"
         SELECT
             pt.*,
+            p.id AS player_id,
             p.short_id,
             p.display_name,
-            p.rating
+            p.rating,
+            p.deviation,
+            p.volatility
         FROM
             participant pt, battle b, player p
         WHERE
@@ -446,7 +458,7 @@ pub async fn preload_participants(
         .map(|p| Participant {
             player: Player {
                 id: p.short_id,
-                mmr: p.rating as i32,
+                mmr: p.rating.ordinal() as i32,
                 display_name: p.display_name,
                 public_key: None,
             },

@@ -25,7 +25,6 @@ pub struct RatingPeriod {
 #[derive(Clone, Debug, FromRow)]
 pub struct CurrentPlayerRating {
     /// The id of the player this is for.
-    #[sqlx(rename = "id")]
     pub player_id: i32,
     /// The player's actual rating.
     pub rating: f32,
@@ -33,6 +32,16 @@ pub struct CurrentPlayerRating {
     pub deviation: f32,
     /// The player's "skill volatility." Only applies to Glicko-2.
     pub volatility: f32,
+}
+
+impl CurrentPlayerRating {
+    /// The player's ordinal.
+    ///
+    /// This is a number where the player's true skill rating is above with a
+    /// 95% chance.
+    pub fn ordinal(&self) -> f32 {
+        self.rating - self.deviation * 2.0
+    }
 }
 
 /// A historic player rating.

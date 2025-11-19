@@ -142,7 +142,7 @@ pub struct PlayerRatingDefaults {
 impl Default for PlayerRatingDefaults {
     fn default() -> Self {
         PlayerRatingDefaults {
-            rating: 1500.0,
+            rating: 1700.0,
             deviation: 350.0,
             volatility: 0.06,
         }
