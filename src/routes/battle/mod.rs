@@ -380,8 +380,11 @@ pub async fn update(
         .fetch_all(&mut *tx)
         .await?;
 
-        for rating in ratings {
-            update_rating(&rating, &state.config.mmr, &mut *tx).await?;
+        // Only update if there was more than 1 participant
+        if ratings.len() > 1 {
+            for rating in ratings {
+                update_rating(&rating, &state.config.mmr, &mut *tx).await?;
+            }
         }
     }
 

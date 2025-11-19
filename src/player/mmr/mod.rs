@@ -195,9 +195,12 @@ pub async fn update_rating(
         .collect::<Vec<_>>();
 
     // Get the player's new rating
-    let new_rating = glicko2::rate(config, rating, &matchups, period.period_elapsed);
+    let mut new_rating = glicko2::rate(config, rating, &matchups, period.period_elapsed);
 
-    tracing::debug!(?new_rating, "/updating rating for");
+    // Cap deviation at certain value
+    new_rating.deviation = new_rating.deviation.min(config.defaults.deviation);
+
+    tracing::debug!(?new_rating, "updating rating for");
 
     // Update the rating in-database
     sqlx::query(
