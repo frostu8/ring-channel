@@ -198,7 +198,7 @@ pub async fn update_rating(
     let mut new_rating = glicko2::rate(config, rating, &matchups, period.period_elapsed);
 
     // Cap deviation at certain value
-    new_rating.deviation = new_rating.deviation.min(config.defaults.deviation);
+    new_rating.deviation = f32::min(new_rating.deviation, config.defaults.deviation);
 
     tracing::debug!(?new_rating, "updating rating for");
 
@@ -325,6 +325,9 @@ pub async fn next_rating_period(
 
             // Get the player's new rating
             let new_rating = glicko2::rate(config, &player, &matchups, 1.0);
+
+            // Cap deviation at certain value
+            new_rating.deviation = f32::min(new_rating.deviation, config.defaults.deviation);
 
             let now = Utc::now();
 
