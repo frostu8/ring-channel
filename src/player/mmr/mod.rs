@@ -324,7 +324,7 @@ pub async fn next_rating_period(
                     .collect::<Vec<_>>();
 
             // Get the player's new rating
-            let new_rating = glicko2::rate(config, &player, &matchups, 1.0);
+            let mut new_rating = glicko2::rate(config, &player, &matchups, 1.0);
 
             // Cap deviation at certain value
             new_rating.deviation = f32::min(new_rating.deviation, config.defaults.deviation);
