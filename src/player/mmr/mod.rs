@@ -8,6 +8,7 @@ use chrono::{DateTime, Utc};
 
 use ring_channel_model::battle::BattleStatus;
 use sqlx::{FromRow, SqliteConnection};
+use tracing::instrument;
 
 use crate::{app::AppError, config::MmrConfig};
 
@@ -170,6 +171,7 @@ pub async fn init_rating(
 ///
 /// Ensure both player's ratings exist (by calling [`get_rating`] for each of
 /// them) before calling this!
+#[instrument(skip(conn))]
 pub async fn update_rating(
     rating: &PlayerRating,
     config: &MmrConfig,
@@ -359,6 +361,7 @@ pub async fn next_rating_period(
     Ok(period)
 }
 
+#[instrument(skip(conn))]
 async fn fetch_matchups(
     player_id: i32,
     from: DateTime<Utc>,

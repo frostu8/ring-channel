@@ -6,14 +6,16 @@
 -- Outputs: opponent rating r.*, b.status, posiiton, mw.finish_time
 
 WITH recent_ratings AS (
-    SELECT r1.*
+    SELECT r.*
     FROM
-        player p, rating r1, rating r2
+        rating r
     WHERE
-        p.id = r1.player_id
-        AND p.id = r2.player_id
-    GROUP BY p.id, r1.inserted_at
-    HAVING r1.inserted_at = MAX(r2.inserted_at)
+    	r.period_id = (
+    		SELECT id
+    		FROM rating_period
+    		ORDER BY inserted_at DESC
+    		LIMIT 1
+    	)
 )
 SELECT
     r.*,

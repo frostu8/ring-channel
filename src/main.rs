@@ -47,6 +47,7 @@ use cookie::Key;
 use tracing_subscriber::{
     filter::{EnvFilter, LevelFilter},
     fmt,
+    layer::SubscriberExt,
 };
 
 const OPENAPI_FILE: &str =
@@ -55,14 +56,19 @@ const OPENAPI_FILE: &str =
 #[main]
 async fn main() -> Result<(), Error> {
     dotenv::dotenv().ok();
-    fmt::fmt()
-        .with_env_filter(
-            EnvFilter::builder()
-                .with_default_directive(LevelFilter::INFO.into())
-                .from_env_lossy(),
-        )
-        .with_writer(io::stderr)
-        .init();
+
+    let registry = tracing_subscriber::registry();
+
+    let fmt_layer = fmt::layer().with_writer(io::stderr);
+    let filter_layer = EnvFilter::builder()
+        .with_default_directive(LevelFilter::INFO.into())
+        .from_env_lossy();
+
+    #[cfg(feature = "tracy")]
+    let registry = registry.with(tracing_tracy::TracyLayer::default());
+
+    let registry = registry.with(filter_layer).with(fmt_layer);
+    tracing::subscriber::set_global_default(registry)?;
 
     let cli = Args::parse();
 
