@@ -107,7 +107,7 @@ pub struct Glicko2Config {
 impl Default for Glicko2Config {
     fn default() -> Self {
         Glicko2Config {
-            period: TimeDelta::seconds(21_600),
+            period: TimeDelta::seconds(86_400),
             tau: 0.5,
             defaults: InitialRating::default(),
         }
