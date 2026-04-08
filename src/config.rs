@@ -17,13 +17,15 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer, de::Error as _};
 
 use anyhow::Error;
 
+use crate::player::mmr::glicko2::Glicko2Config;
+
 /// Full application configuration.
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 pub struct Config {
     /// General server configuration.
     pub server: ServerConfig,
     /// Mmr config.
-    pub mmr: MmrConfig,
+    pub mmr: RatingModelConfig,
     /// HTTP server configuration.
     pub http: HttpConfig,
     /// Discord configuration.
@@ -95,57 +97,15 @@ impl Default for WagerBotConfig {
 
 /// Configuration for MMR.
 #[derive(Clone, Debug, Deserialize, Serialize)]
-pub struct MmrConfig {
-    /// Enables MMR.
-    pub enabled: bool,
-    /// The rating period.
-    ///
-    /// This should be set to a reasonable value for a single player to get at
-    /// least 10 matches in, but it shouldn't be too high.
-    #[serde(
-        deserialize_with = "deserialize_duration",
-        serialize_with = "serialize_duration"
-    )]
-    pub period: TimeDelta,
-    /// Constrains the change in volatility over time.
-    ///
-    /// Higher values may make skill volatility change more frequently, and
-    /// lower values make it stay around the same.
-    ///
-    /// See the [Glicko-2] paper for more.
-    ///
-    /// [Glicko-2]: https://www.glicko.net/glicko/glicko2.pdf
-    pub tau: f32,
-    /// Default settings for new players.
-    pub defaults: PlayerRatingDefaults,
+#[serde(tag = "model", rename_all = "snake_case")]
+pub enum RatingModelConfig {
+    Unrated,
+    Glicko2(Glicko2Config),
 }
 
-impl Default for MmrConfig {
+impl Default for RatingModelConfig {
     fn default() -> Self {
-        MmrConfig {
-            enabled: true,
-            period: TimeDelta::seconds(86_400),
-            tau: 0.5,
-            defaults: PlayerRatingDefaults::default(),
-        }
-    }
-}
-
-#[derive(Clone, Debug, Deserialize, Serialize)]
-pub struct PlayerRatingDefaults {
-    /// The rating new players start at.
-    pub rating: f32,
-    pub deviation: f32,
-    pub volatility: f32,
-}
-
-impl Default for PlayerRatingDefaults {
-    fn default() -> Self {
-        PlayerRatingDefaults {
-            rating: 1700.0,
-            deviation: 350.0,
-            volatility: 0.06,
-        }
+        RatingModelConfig::Glicko2(Glicko2Config::default())
     }
 }
 
@@ -188,7 +148,7 @@ pub fn read_config(config_file: impl AsRef<Path>) -> Result<Config, Error> {
         .map_err(From::from)
 }
 
-fn deserialize_duration<'de, D>(deserializer: D) -> Result<TimeDelta, D::Error>
+pub fn deserialize_duration<'de, D>(deserializer: D) -> Result<TimeDelta, D::Error>
 where
     D: Deserializer<'de>,
 {
@@ -198,7 +158,7 @@ where
     TimeDelta::from_std(duration).map_err(D::Error::custom)
 }
 
-fn serialize_duration<S>(delta: &TimeDelta, serializer: S) -> Result<S::Ok, S::Error>
+pub fn serialize_duration<S>(delta: &TimeDelta, serializer: S) -> Result<S::Ok, S::Error>
 where
     S: Serializer,
 {

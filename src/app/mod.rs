@@ -2,7 +2,7 @@
 
 pub mod error;
 
-use std::sync::Arc;
+use std::{any::Any, sync::Arc};
 
 pub use error::AppError;
 
@@ -14,7 +14,7 @@ use axum::{
     response::{IntoResponse, Response},
 };
 
-use derive_more::Deref;
+use derive_more::{AsRef, Deref};
 
 use garde::Validate;
 use http::{header, request::Parts};
@@ -23,7 +23,7 @@ use serde::de::DeserializeOwned;
 
 use sqlx::SqlitePool;
 
-use crate::{app::error::AppErrorKind, config::Config, room};
+use crate::{app::error::AppErrorKind, config::Config, player::mmr, room};
 
 /// Shared app state.
 ///
@@ -38,6 +38,93 @@ pub struct AppState {
     ///
     /// May be missing secrets as they are taken at initialization.
     pub config: Arc<Config>,
+}
+
+/// Rating model.
+#[derive(Clone, Debug, Deref, AsRef)]
+pub struct Model<T> {
+    #[deref]
+    inner: T,
+}
+
+impl<T> mmr::Model for Model<T>
+where
+    T: mmr::Model,
+{
+    type Data = T::Data;
+
+    fn create_rating(&self, player_id: i32) -> mmr::Rating<Self::Data> {
+        self.inner.create_rating(player_id)
+    }
+
+    fn rate(
+        &self,
+        rating: &mmr::RatingRecord<Self::Data>,
+        matchups: &[mmr::Matchup<Self::Data>],
+        period_elapsed: f32,
+    ) -> mmr::Rating<Self::Data> {
+        self.inner.rate(rating, matchups, period_elapsed)
+    }
+
+    fn period(&self) -> chrono::TimeDelta {
+        self.inner.period()
+    }
+}
+
+impl<T> Model<T> {
+    /// Creates a new rating model.
+    pub fn new(model: T) -> Model<T> {
+        Model { inner: model }
+    }
+}
+
+impl<T> Model<T>
+where
+    T: 'static,
+{
+    /// Returns `true` if ratings are enabled.
+    pub fn ratings_enabled(&self) -> bool {
+        !(&self.inner as &dyn Any).is::<Unrated>()
+    }
+}
+
+impl<T> From<T> for Model<T>
+where
+    T: mmr::Model,
+{
+    fn from(value: T) -> Self {
+        Model { inner: value }
+    }
+}
+
+/// Indicator for "no rating model."
+///
+/// This shouldn't be used as a [`Model`], as all methods panic, and is only
+/// meant to be used in a handler extension.
+///
+/// [`Model`]: mmr::Model
+#[derive(Clone, Copy, Debug)]
+pub struct Unrated;
+
+impl mmr::Model for Unrated {
+    type Data = ();
+
+    fn create_rating(&self, _player_id: i32) -> mmr::Rating<Self::Data> {
+        unimplemented!()
+    }
+
+    fn rate(
+        &self,
+        _rating: &mmr::RatingRecord<Self::Data>,
+        _matchups: &[mmr::Matchup<Self::Data>],
+        _period_elapsed: f32,
+    ) -> mmr::Rating<Self::Data> {
+        unimplemented!()
+    }
+
+    fn period(&self) -> chrono::TimeDelta {
+        unimplemented!()
+    }
 }
 
 /// Selective body extractor.

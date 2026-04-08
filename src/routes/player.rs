@@ -1,6 +1,9 @@
 //! Active player routes.
 
-use axum::extract::{Path, State};
+use axum::{
+    Extension,
+    extract::{Path, State},
+};
 
 use chrono::Utc;
 
@@ -15,22 +18,26 @@ use sqlx::FromRow;
 use tracing::instrument;
 
 use crate::{
-    app::{AppError, AppJson, AppState, Payload, error::AppErrorKind},
+    app::{AppError, AppJson, AppState, Model, Payload, error::AppErrorKind},
     auth::api_key::ServerAuthentication,
     player::{
         get_player,
-        mmr::{CurrentPlayerRating, init_rating},
+        mmr::{self, Rating, RawRating, init_rating},
     },
 };
 
 pub const MAX_INSERT_ATTEMPTS: usize = 25;
 
 /// Shows a player.
-#[instrument(skip(state))]
-pub async fn show(
+#[instrument(skip(state, model))]
+pub async fn show<T>(
     Path((short_id,)): Path<(String,)>,
+    Extension(model): Extension<Model<T>>,
     State(state): State<AppState>,
-) -> Result<AppJson<Player>, AppError> {
+) -> Result<AppJson<Player>, AppError>
+where
+    T: mmr::Model + 'static,
+{
     let mut conn = state.db.acquire().await?;
 
     get_player(&short_id, &mut conn)
@@ -38,26 +45,33 @@ pub async fn show(
         .and_then(|f| {
             f.ok_or_else(|| AppError::not_found(format!("Player {} not found", short_id)))
         })
-        .map(|player| AppJson(player.into()))
+        .and_then(|player| player.normalize(&model))
+        .map(|player| AppJson(player))
 }
 
 /// Registers a joined player.
 ///
 /// All players must be registered to create matches for them!
-#[instrument(skip(state))]
-pub async fn register(
+#[instrument(skip(state, model))]
+pub async fn register<T>(
     _auth_guard: ServerAuthentication,
+    Extension(model): Extension<Model<T>>,
     State(state): State<AppState>,
     Payload(request): Payload<RegisterPlayerRequest>,
-) -> Result<(StatusCode, AppJson<Player>), AppError> {
+) -> Result<(StatusCode, AppJson<Player>), AppError>
+where
+    T: mmr::Model + 'static,
+{
     #[derive(FromRow)]
     struct UpsertQuery {
         #[sqlx(rename = "player_id")]
         id: i32,
         short_id: String,
         display_name: String,
-        #[sqlx(flatten)]
-        rating: CurrentPlayerRating,
+        rating: Option<f32>,
+        deviation: Option<f32>,
+        #[sqlx(rename = "rating_extra")]
+        extra: Option<String>,
     }
 
     let mut tx = state.db.begin().await?;
@@ -67,7 +81,7 @@ pub async fn register(
     // find existing player
     let player_query = sqlx::query_as::<_, UpsertQuery>(
         r#"
-        SELECT id AS player_id, short_id, display_name, rating, deviation, volatility
+        SELECT id AS player_id, short_id, display_name, rating, deviation, rating_extra
         FROM player
         WHERE public_key = $1
         "#,
@@ -77,6 +91,21 @@ pub async fn register(
     .await?;
 
     if let Some(mut player) = player_query {
+        let rating = if !model.ratings_enabled() {
+            None
+        } else if let Some((rating, deviation)) = player.rating.zip(player.deviation) {
+            let rating = RawRating {
+                player_id: player.id,
+                rating,
+                deviation,
+                extra: player.extra,
+            };
+
+            Some(Rating::<T::Data>::try_from(rating).map_err(AppError::new)?)
+        } else {
+            None
+        };
+
         // a player exists already, we just need to update them
         if player.display_name != request.display_name {
             sqlx::query(
@@ -102,7 +131,7 @@ pub async fn register(
             StatusCode::CREATED,
             AppJson(Player {
                 id: player.short_id,
-                mmr: player.rating.ordinal() as i32,
+                mmr: rating.map(|rating| rating.ordinal() as i32),
                 display_name: player.display_name,
                 public_key: Some(request.public_key),
             }),
@@ -128,23 +157,17 @@ pub async fn register(
                         short_id,
                         public_key,
                         display_name,
-                        rating,
-                        deviation,
-                        volatility,
                         inserted_at,
                         updated_at
                     )
-                VALUES ($1, $2, $3, $5, $6, $7, $4, $4)
-                RETURNING id AS player_id, short_id, display_name, rating, deviation, volatility
+                VALUES ($1, $2, $3, $4, $4)
+                RETURNING id AS player_id, short_id, display_name
                 "#,
             )
             .bind(&short_id)
             .bind(request.public_key.as_str())
             .bind(&request.display_name)
             .bind(now)
-            .bind(state.config.mmr.defaults.rating)
-            .bind(state.config.mmr.defaults.deviation)
-            .bind(state.config.mmr.defaults.volatility)
             .fetch_one(&mut *tx)
             .await;
 
@@ -169,8 +192,12 @@ pub async fn register(
         }
 
         if let Some(player) = inserted_player {
-            // Add a historic rating for glicko2 to work
-            init_rating(player.id, &state.config.mmr, &mut *tx).await?;
+            let rating = if model.ratings_enabled() {
+                // Add a historic rating for glicko2 to work
+                Some(init_rating(player.id, &model, &mut *tx).await?)
+            } else {
+                None
+            };
 
             tx.commit().await?;
 
@@ -178,7 +205,7 @@ pub async fn register(
                 StatusCode::CREATED,
                 AppJson(Player {
                     id: player.short_id,
-                    mmr: player.rating.ordinal() as i32,
+                    mmr: rating.map(|rating| rating.ordinal() as i32),
                     display_name: player.display_name,
                     public_key: Some(request.public_key),
                 }),

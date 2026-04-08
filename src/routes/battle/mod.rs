@@ -3,7 +3,10 @@
 pub mod player;
 pub mod wager;
 
-use axum::extract::{Path, State};
+use axum::{
+    Extension,
+    extract::{Path, State},
+};
 
 use chrono::{DateTime, TimeDelta, Utc};
 
@@ -27,11 +30,13 @@ use tracing::instrument;
 
 use uuid::Uuid;
 
+use std::fmt::Debug;
+
 use crate::{
-    app::{AppError, AppForm, AppGarde, AppJson, AppState, Payload, error::AppErrorKind},
+    app::{AppError, AppForm, AppGarde, AppJson, AppState, Model, Payload, error::AppErrorKind},
     auth::api_key::ServerAuthentication,
     battle::{BattleSchema, calculate_winnings},
-    player::mmr::{CurrentPlayerRating, PlayerRating, update_rating},
+    player::mmr::{self, Rating, RatingRecord, RawRating, RawRatingRecord, update_rating},
     room::BattleData,
 };
 
@@ -53,12 +58,15 @@ fn list_battle_count_default() -> i32 {
 }
 
 /// Lists all matches.
-#[instrument(skip(state))]
-#[axum::debug_handler]
-pub async fn list(
+#[instrument(skip(state, model))]
+pub async fn list<T>(
+    Extension(model): Extension<Model<T>>,
     State(state): State<AppState>,
     AppGarde(AppForm(query)): AppGarde<AppForm<ListBattlesQuery>>,
-) -> Result<AppJson<Vec<Battle>>, AppError> {
+) -> Result<AppJson<Vec<Battle>>, AppError>
+where
+    T: mmr::Model + 'static,
+{
     let mut conn = state.db.acquire().await?;
 
     let mut battles = sqlx::query_as::<_, BattleSchema>(
@@ -86,18 +94,22 @@ pub async fn list(
 
     // Preload all battles
     for battle in battles.iter_mut() {
-        preload_participants(battle, &mut *conn).await?;
+        preload_participants(&model, battle, &mut *conn).await?;
     }
 
     Ok(AppJson(battles))
 }
 
 /// Shows an existing match.
-#[instrument(skip(state))]
-pub async fn show(
+#[instrument(skip(state, model))]
+pub async fn show<T>(
     Path((uuid,)): Path<(Uuid,)>,
+    Extension(model): Extension<Model<T>>,
     State(state): State<AppState>,
-) -> Result<AppJson<Battle>, AppError> {
+) -> Result<AppJson<Battle>, AppError>
+where
+    T: mmr::Model + 'static,
+{
     let mut conn = state.db.acquire().await?;
 
     let battle = sqlx::query_as::<_, BattleSchema>(
@@ -118,26 +130,32 @@ pub async fn show(
     // Create battle struct
     let mut battle = Battle::from(battle);
 
-    preload_participants(&mut battle, &mut *conn).await?;
+    preload_participants(&model, &mut battle, &mut *conn).await?;
 
     Ok(AppJson(battle))
 }
 
 /// Creates a match.
-#[instrument(skip(state))]
-pub async fn create(
+#[instrument(skip(state, model))]
+pub async fn create<T>(
     _auth_guard: ServerAuthentication,
+    Extension(model): Extension<Model<T>>,
     State(state): State<AppState>,
     Payload(request): Payload<CreateBattleRequest>,
-) -> Result<(StatusCode, AppJson<Battle>), AppError> {
+) -> Result<(StatusCode, AppJson<Battle>), AppError>
+where
+    T: mmr::Model + 'static,
+{
     #[derive(FromRow)]
     struct PlayerQuery {
         #[sqlx(rename = "player_id")]
         id: i32,
         short_id: String,
         display_name: String,
-        #[sqlx(flatten)]
-        rating: CurrentPlayerRating,
+        rating: Option<f32>,
+        deviation: Option<f32>,
+        #[sqlx(rename = "rating_extra")]
+        extra: Option<String>,
     }
 
     let uuid = Uuid::new_v4();
@@ -176,7 +194,7 @@ pub async fn create(
                 p.display_name,
                 p.rating,
                 p.deviation,
-                p.volatility
+                p.rating_extra
             FROM player p
             WHERE short_id = $1
             "#,
@@ -185,7 +203,22 @@ pub async fn create(
         .fetch_optional(&mut *tx)
         .await?;
 
-        if let Some(player) = player {
+        if let Some(mut player) = player {
+            let rating = if !model.ratings_enabled() {
+                None
+            } else if let Some((rating, deviation)) = player.rating.zip(player.deviation) {
+                let rating = RawRating {
+                    player_id: player.id,
+                    rating,
+                    deviation,
+                    extra: player.extra.take(),
+                };
+
+                Some(Rating::<T::Data>::try_from(rating).map_err(AppError::new)?)
+            } else {
+                None
+            };
+
             // add player to match
             sqlx::query(
                 r#"
@@ -207,7 +240,7 @@ pub async fn create(
             participants.push(Participant {
                 player: Player {
                     id: player.short_id,
-                    mmr: player.rating.ordinal() as i32,
+                    mmr: rating.map(|r| r.ordinal() as i32),
                     public_key: None,
                     display_name: player.display_name,
                 },
@@ -252,13 +285,18 @@ pub async fn create(
 }
 
 /// Updates a match.
-#[instrument(skip(state))]
-pub async fn update(
+#[instrument(skip(state, model))]
+pub async fn update<T>(
     _auth_guard: ServerAuthentication,
     Path((uuid,)): Path<(Uuid,)>,
+    Extension(model): Extension<Model<T>>,
     State(state): State<AppState>,
     Payload(request): Payload<UpdateBattleRequest>,
-) -> Result<AppJson<Battle>, AppError> {
+) -> Result<AppJson<Battle>, AppError>
+where
+    T: Debug + mmr::Model + 'static,
+    T::Data: Debug,
+{
     #[derive(FromRow, Deref, DerefMut)]
     struct BattleQuery {
         id: i32,
@@ -359,7 +397,7 @@ pub async fn update(
         || request.status == Some(BattleStatus::Cancelled)
     {
         // update ratings for all players
-        let ratings = sqlx::query_as::<_, PlayerRating>(
+        let ratings = sqlx::query_as::<_, RawRatingRecord>(
             r#"
             SELECT r.*, pl.id
             FROM participant p, player pl, rating r
@@ -383,7 +421,8 @@ pub async fn update(
         // Only update if there was more than 1 participant
         if ratings.len() > 1 {
             for rating in ratings {
-                update_rating(&rating, &state.config.mmr, &mut *tx).await?;
+                let rating = RatingRecord::<T::Data>::try_from(rating).map_err(AppError::new)?;
+                update_rating(&rating, &model, &mut *tx).await?;
             }
         }
     }
@@ -391,7 +430,7 @@ pub async fn update(
     // Create battle struct
     let mut battle = Battle::from(&battle_query.schema);
 
-    preload_participants(&mut battle, &mut *tx).await?;
+    preload_participants(&model, &mut battle, &mut *tx).await?;
 
     // Update websocket listeners
     state
@@ -415,12 +454,17 @@ pub async fn update(
 /// Preloads the `participants` field of a [`Battle`].
 ///
 /// If this function fails, `battle` will not be modified.
-pub async fn preload_participants(
+pub async fn preload_participants<T>(
+    model: &Model<T>,
     battle: &mut Battle,
     conn: &mut SqliteConnection,
-) -> Result<(), AppError> {
+) -> Result<(), AppError>
+where
+    T: mmr::Model + 'static,
+{
     #[derive(FromRow)]
     struct ParticipantsQuery {
+        player_id: i32,
         short_id: String,
         display_name: String,
         #[sqlx(try_from = "u8")]
@@ -430,8 +474,10 @@ pub async fn preload_participants(
         skin: Option<String>,
         kart_speed: Option<i32>,
         kart_weight: Option<i32>,
-        #[sqlx(flatten)]
-        rating: CurrentPlayerRating,
+        rating: Option<f32>,
+        deviation: Option<f32>,
+        #[sqlx(rename = "rating_extra")]
+        extra: Option<String>,
     }
 
     let participants = sqlx::query_as::<_, ParticipantsQuery>(
@@ -443,7 +489,7 @@ pub async fn preload_participants(
             p.display_name,
             p.rating,
             p.deviation,
-            p.volatility
+            p.rating_extra
         FROM
             participant pt, battle b, player p
         WHERE
@@ -458,21 +504,41 @@ pub async fn preload_participants(
 
     battle.participants = participants
         .into_iter()
-        .map(|p| Participant {
-            player: Player {
-                id: p.short_id,
-                mmr: p.rating.ordinal() as i32,
-                display_name: p.display_name,
-                public_key: None,
-            },
-            team: p.team,
-            finish_time: p.finish_time,
-            no_contest: p.no_contest,
-            skin: p.skin,
-            kart_speed: p.kart_speed,
-            kart_weight: p.kart_weight,
+        .map(|mut p| {
+            if !model.ratings_enabled() {
+                Ok((p, None))
+            } else if let Some((rating, deviation)) = p.rating.zip(p.deviation) {
+                let rating = RawRating {
+                    player_id: p.player_id,
+                    rating,
+                    deviation,
+                    extra: p.extra.take(),
+                };
+
+                Rating::<T::Data>::try_from(rating)
+                    .map_err(AppError::new)
+                    .map(|rating| (p, Some(rating)))
+            } else {
+                Ok((p, None))
+            }
         })
-        .collect();
+        .map(|res| {
+            res.map(|(p, rating)| Participant {
+                player: Player {
+                    id: p.short_id,
+                    mmr: rating.map(|rating| rating.ordinal() as i32),
+                    display_name: p.display_name,
+                    public_key: None,
+                },
+                team: p.team,
+                finish_time: p.finish_time,
+                no_contest: p.no_contest,
+                skin: p.skin,
+                kart_speed: p.kart_speed,
+                kart_weight: p.kart_weight,
+            })
+        })
+        .collect::<Result<Vec<_>, _>>()?;
 
     Ok(())
 }

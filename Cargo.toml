@@ -15,7 +15,7 @@ anyhow = "1"
 axum = { version = "0.8", features = ["macros", "ws"] }
 axum-server = "0.7"
 chrono = { workspace = true }
-derive_more = { workspace = true, features = ["display", "error", "from", "deref", "deref_mut"] }
+derive_more = { workspace = true, features = ["display", "error", "from", "deref", "deref_mut", "as_ref"] }
 dotenv = "0.15"
 figment = { version = "0.10", features = ["env", "toml"] }
 futures-util = "0.3"
@@ -51,6 +51,7 @@ garde = { version = "0.22", features = ["derive"] }
 humantime = "2"
 tokio-cron-scheduler = { version = "0.15", features = ["signal"] }
 tracing-tracy = { version = "0.11", features = ["enable"], optional = true }
+ron = "0.12.1"
 
 [workspace]
 resolver = "3"

@@ -1,4 +1,4 @@
-use std::{env, io, net::SocketAddr, path::PathBuf, sync::Arc};
+use std::{env, fmt::Debug, io, net::SocketAddr, path::PathBuf, sync::Arc};
 
 use http::{HeaderValue, Method, header};
 
@@ -8,7 +8,7 @@ use time::Duration;
 use clap::{CommandFactory as _, Parser};
 
 use axum::{
-    Router,
+    Extension, Router,
     extract::{MatchedPath, Request},
     middleware::{Next, from_fn},
     response::{IntoResponse, Response},
@@ -18,11 +18,11 @@ use axum::{
 use axum_server::Handle;
 
 use ring_channel::{
-    app::{AppError, AppState},
+    app::{AppError, AppState, Model, Unrated},
     auth::oauth2::OauthState,
     cli::{self, Args, Command, MmrCommand, MmrDump},
-    config::read_config,
-    player::mmr::{init_rating, next_rating_period},
+    config::{Config, RatingModelConfig, read_config},
+    player::mmr::{self, glicko2::Glicko2, init_rating, next_rating_period},
     room, routes,
 };
 
@@ -72,14 +72,29 @@ async fn main() -> Result<(), Error> {
 
     let cli = Args::parse();
 
-    let config_path = match cli.config {
-        Some(path) => path,
+    let config_path = match &cli.config {
+        Some(path) => path.to_owned(),
         None => PathBuf::from("config.toml"),
     };
 
     // Read config file
-    let mut config = read_config(config_path)?;
+    let config = read_config(config_path)?;
 
+    // Setup MMR w/ config
+    match &config.mmr {
+        RatingModelConfig::Unrated => with_rating_model(cli, config, Unrated).await,
+        RatingModelConfig::Glicko2(mmr_config) => {
+            let model = Glicko2::new(mmr_config.clone());
+            with_rating_model(cli, config, model).await
+        }
+    }
+}
+
+async fn with_rating_model<T>(cli: Args, mut config: Config, model: T) -> Result<(), Error>
+where
+    T: Debug + Clone + Send + Sync + mmr::Model + 'static,
+    T::Data: Debug,
+{
     let database_url = config
         .server
         .database_url
@@ -129,24 +144,8 @@ async fn main() -> Result<(), Error> {
                     .await?;
 
                 for (id,) in player_ids {
-                    // reset player's rating
-                    sqlx::query(
-                        r#"
-                        UPDATE player
-                        SET rating = $1, deviation = $2, volatility = $3, updated_at = $5
-                        WHERE id = $4
-                        "#,
-                    )
-                    .bind(config.mmr.defaults.rating)
-                    .bind(config.mmr.defaults.deviation)
-                    .bind(config.mmr.defaults.volatility)
-                    .bind(id)
-                    .bind(chrono::Utc::now())
-                    .execute(&mut *tx)
-                    .await?;
-
                     // init player rating
-                    init_rating(id, &config.mmr, &mut *tx).await?;
+                    init_rating(id, &model, &mut *tx).await?;
                 }
 
                 tx.commit().await?;
@@ -175,8 +174,7 @@ async fn main() -> Result<(), Error> {
                     .await?;
                 }
 
-                ring_channel::player::mmr::dump_rating(std::io::stdout(), &config.mmr, &mut *tx)
-                    .await?;
+                ring_channel::player::mmr::dump_rating(std::io::stdout(), &model, &mut *tx).await?;
 
                 // rollback transaction
                 tx.rollback().await?;
@@ -231,20 +229,23 @@ async fn main() -> Result<(), Error> {
         .nest(
             "/players",
             Router::<AppState>::new()
-                .route("/", post(routes::player::register))
-                .route("/{player_id}", get(routes::player::show)),
+                .route("/", post(routes::player::register::<T>))
+                .route("/{player_id}", get(routes::player::show::<T>)),
         )
         .nest(
             "/matches",
             Router::<AppState>::new()
-                .route("/", get(routes::battle::list))
-                .route("/", post(routes::battle::create))
+                .route("/", get(routes::battle::list::<T>))
+                .route("/", post(routes::battle::create::<T>))
                 .nest(
                     "/{battle_id}",
                     Router::<AppState>::new()
-                        .route("/", get(routes::battle::show))
-                        .route("/", patch(routes::battle::update))
-                        .route("/players/{short_id}", patch(routes::battle::player::update))
+                        .route("/", get(routes::battle::show::<T>))
+                        .route("/", patch(routes::battle::update::<T>))
+                        .route(
+                            "/players/{short_id}",
+                            patch(routes::battle::player::update::<T>),
+                        )
                         .route("/wagers", get(routes::battle::wager::list))
                         .route("/wagers/~me", get(routes::battle::wager::show_self))
                         .route("/wagers/~me", put(routes::battle::wager::create))
@@ -253,7 +254,7 @@ async fn main() -> Result<(), Error> {
         )
         .nest(
             "/chat",
-            Router::<AppState>::new().route("/messages", post(routes::chat::create)),
+            Router::<AppState>::new().route("/messages", post(routes::chat::create::<T>)),
         )
         .nest(
             "/users",
@@ -308,6 +309,7 @@ async fn main() -> Result<(), Error> {
                         .allow_origin(Any),
                 ),
         )
+        .layer(Extension(Model::new(model.clone())))
         .layer(session_layer)
         .layer(
             TraceLayer::new_for_http()
@@ -337,6 +339,7 @@ async fn main() -> Result<(), Error> {
     // start cron jobs
     let sched = JobScheduler::new().await?;
     let state_clone = state.clone();
+    let model_clone = model.clone();
 
     // Start the rating period updater
     // This has to be locked so multiple threads aren't doing this together
@@ -345,11 +348,12 @@ async fn main() -> Result<(), Error> {
         .add(Job::new_async("1/60 * * * * *", move |_uuid, _l| {
             let state = state_clone.clone();
             let semaphore = semaphore.clone();
+            let model = model_clone.clone();
 
             Box::pin(async move {
                 if let Ok(_permit) = semaphore.try_acquire() {
                     let mut conn = state.db.acquire().await.expect("conn acquire");
-                    let _period = next_rating_period(&state.config.mmr, &mut conn)
+                    let _period = next_rating_period(&model, &mut conn)
                         .await
                         .expect("update period");
                 }

@@ -3,23 +3,27 @@
 //! Since chat is already tracked by clients in logs, it's only fair they can
 //! be stored persistently as long as they can't be accessed anonymously.
 
-use axum::extract::State;
+use axum::{Extension, extract::State};
 
 use chrono::Utc;
 use ring_channel_model::{chat::Message, request::chat::CreateChatMessage};
 
 use crate::{
-    app::{AppError, AppJson, AppState, Payload},
+    app::{AppError, AppJson, AppState, Model, Payload},
     auth::api_key::ServerAuthentication,
-    player::get_player,
+    player::{get_player, mmr},
 };
 
 /// Processes a chat message from the server.
-pub async fn create(
+pub async fn create<T>(
+    Extension(model): Extension<Model<T>>,
     State(state): State<AppState>,
     _auth_guard: ServerAuthentication,
     Payload(request): Payload<CreateChatMessage>,
-) -> Result<AppJson<Message>, AppError> {
+) -> Result<AppJson<Message>, AppError>
+where
+    T: mmr::Model + 'static,
+{
     let now = Utc::now();
 
     let mut conn = state.db.acquire().await?;
@@ -44,7 +48,7 @@ pub async fn create(
     .await?;
 
     let message = Message {
-        player: player.into(),
+        player: player.normalize(&model)?,
         content: request.content,
         created_at: now.format("%+").to_string(),
     };

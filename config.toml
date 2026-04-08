@@ -5,7 +5,7 @@ secure_sessions = false
 bot.enabled = true
 
 [mmr]
-enabled = true
+model = "glicko2"
 
 [http]
 port = 4000

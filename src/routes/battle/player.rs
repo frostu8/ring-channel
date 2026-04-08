@@ -1,6 +1,9 @@
 //! Placement API.
 
-use axum::extract::{Path, State};
+use axum::{
+    Extension,
+    extract::{Path, State},
+};
 
 use ring_channel_model::{
     Player,
@@ -15,19 +18,23 @@ use tracing::instrument;
 use uuid::Uuid;
 
 use crate::{
-    app::{AppError, AppJson, AppState, Payload, error::AppErrorKind},
+    app::{AppError, AppJson, AppState, Model, Payload, error::AppErrorKind},
     auth::api_key::ServerAuthentication,
-    player::mmr::CurrentPlayerRating,
+    player::mmr::{self, Rating, RawRating},
 };
 
 /// Updates the placement of a player for a given match.
-#[instrument(skip(state))]
-pub async fn update(
+#[instrument(skip(state, model))]
+pub async fn update<T>(
     _auth_guard: ServerAuthentication,
     Path((uuid, short_id)): Path<(Uuid, String)>,
+    Extension(model): Extension<Model<T>>,
     State(state): State<AppState>,
     Payload(request): Payload<UpdatePlayerPlacementRequest>,
-) -> Result<AppJson<Participant>, AppError> {
+) -> Result<AppJson<Participant>, AppError>
+where
+    T: mmr::Model + 'static,
+{
     #[derive(FromRow)]
     struct BattleQuery {
         id: i32,
@@ -38,6 +45,7 @@ pub async fn update(
     #[derive(FromRow)]
     struct ParticipantQuery {
         id: Option<i32>,
+        player_id: i32,
         team: Option<u8>,
         no_contest: Option<bool>,
         finish_time: Option<i32>,
@@ -45,8 +53,10 @@ pub async fn update(
         kart_speed: Option<i32>,
         kart_weight: Option<i32>,
         display_name: String,
-        #[sqlx(flatten)]
-        rating: CurrentPlayerRating,
+        rating: Option<f32>,
+        deviation: Option<f32>,
+        #[sqlx(rename = "rating_extra")]
+        extra: Option<String>,
     }
 
     // find match first
@@ -79,7 +89,7 @@ pub async fn update(
             p.display_name,
             p.rating,
             p.deviation,
-            p.volatility
+            p.rating_extra
         FROM
             player p
         LEFT OUTER JOIN
@@ -133,10 +143,25 @@ pub async fn update(
     .execute(&state.db)
     .await?;
 
+    let rating = if !model.ratings_enabled() {
+        None
+    } else if let Some((rating, deviation)) = participant.rating.zip(participant.deviation) {
+        let rating = RawRating {
+            player_id: participant.player_id,
+            rating,
+            deviation,
+            extra: participant.extra,
+        };
+
+        Some(Rating::<T::Data>::try_from(rating).map_err(AppError::new)?)
+    } else {
+        None
+    };
+
     Ok(AppJson(Participant {
         player: Player {
             id: short_id,
-            mmr: participant.rating.ordinal() as i32,
+            mmr: rating.map(|r| r.ordinal() as i32),
             public_key: None,
             display_name: participant.display_name,
         },
