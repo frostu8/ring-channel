@@ -17,7 +17,7 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer, de::Error as _};
 
 use anyhow::Error;
 
-use crate::player::mmr::glicko2::Glicko2Config;
+use crate::player::mmr::{glicko2::Glicko2Config, openskill::OpenSkillConfig};
 
 /// Full application configuration.
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
@@ -101,6 +101,8 @@ impl Default for WagerBotConfig {
 pub enum RatingModelConfig {
     Unrated,
     Glicko2(Glicko2Config),
+    #[serde(rename = "openskill")]
+    OpenSkill(OpenSkillConfig),
 }
 
 impl Default for RatingModelConfig {

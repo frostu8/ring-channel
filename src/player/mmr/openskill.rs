@@ -1,7 +1,7 @@
 //! Openskill bindings.
 
 use std::{
-    fmt::{self, Display, Formatter},
+    fmt::{self, Debug, Display, Formatter},
     process::Stdio,
     sync::Arc,
 };
@@ -54,7 +54,7 @@ impl OpenSkill {
                 .take()
                 .map(BufReader::new)
                 .ok_or(anyhow::Error::msg("no stdout exposed"))?,
-            child,
+            _child: child,
         };
 
         // Send update config
@@ -106,6 +106,14 @@ impl Model for OpenSkill {
 
     fn period(&self) -> chrono::TimeDelta {
         self.config.period
+    }
+}
+
+impl Debug for OpenSkill {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        f.debug_struct("OpenSkill")
+            .field("config", &self.config)
+            .finish_non_exhaustive()
     }
 }
 
@@ -204,7 +212,7 @@ impl Display for UnexpectedResponse {
 impl std::error::Error for UnexpectedResponse {}
 
 struct Process {
-    child: Child,
+    _child: Child,
     stdin: ChildStdin,
     stdout: BufReader<ChildStdout>,
 }
@@ -219,6 +227,7 @@ impl Process {
 
         // Serialize request
         let mut body = serde_json::to_string(&request).map_err(AppError::new)?;
+        body.push('\n');
 
         // Write body
         self.stdin
@@ -234,7 +243,7 @@ impl Process {
             .map_err(AppError::new)?;
 
         // Deserialize
-        serde_json::from_str::<Response>(&body).map_err(AppError::new)
+        serde_json::from_str::<Response>(body.trim()).map_err(AppError::new)
     }
 }
 

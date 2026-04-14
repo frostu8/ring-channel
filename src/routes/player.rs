@@ -161,7 +161,7 @@ where
                         updated_at
                     )
                 VALUES ($1, $2, $3, $4, $4)
-                RETURNING id AS player_id, short_id, display_name
+                RETURNING id AS player_id, short_id, display_name, rating, deviation, rating_extra
                 "#,
             )
             .bind(&short_id)

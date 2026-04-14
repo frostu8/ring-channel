@@ -22,7 +22,7 @@ use ring_channel::{
     auth::oauth2::OauthState,
     cli::{self, Args, Command, MmrCommand, MmrDump},
     config::{Config, RatingModelConfig, read_config},
-    player::mmr::{self, glicko2::Glicko2, init_rating, next_rating_period},
+    player::mmr::{self, glicko2::Glicko2, init_rating, next_rating_period, openskill::OpenSkill},
     room, routes,
 };
 
@@ -85,6 +85,10 @@ async fn main() -> Result<(), Error> {
         RatingModelConfig::Unrated => with_rating_model(cli, config, Unrated).await,
         RatingModelConfig::Glicko2(mmr_config) => {
             let model = Glicko2::new(mmr_config.clone());
+            with_rating_model(cli, config, model).await
+        }
+        RatingModelConfig::OpenSkill(mmr_config) => {
+            let model = OpenSkill::new(mmr_config.clone()).await?;
             with_rating_model(cli, config, model).await
         }
     }

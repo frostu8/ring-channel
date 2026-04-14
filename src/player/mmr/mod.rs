@@ -126,13 +126,16 @@ pub struct Rating<T = ()> {
     pub extra: T,
 }
 
-impl<T> Rating<T> {
+impl<T> Rating<T>
+where
+    T: ModelData,
+{
     /// The player's ordinal.
     ///
     /// This is a number where the player's true skill rating is above with a
     /// 95% chance.
     pub fn ordinal(&self) -> f32 {
-        self.rating - self.deviation * 2.0
+        T::ordinal(self)
     }
 }
 

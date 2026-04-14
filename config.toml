@@ -5,7 +5,11 @@ secure_sessions = false
 bot.enabled = true
 
 [mmr]
-model = "glicko2"
+model = "openskill"
+command = "uv run main.py"
+tau = 0.08333333333
+defaults.rating = 25
+defaults.deviation = 8.333333333333
 
 [http]
 port = 4000
