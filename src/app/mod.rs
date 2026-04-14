@@ -53,17 +53,17 @@ where
 {
     type Data = T::Data;
 
-    fn create_rating(&self, player_id: i32) -> mmr::Rating<Self::Data> {
-        self.inner.create_rating(player_id)
+    async fn create_rating(&self, player_id: i32) -> Result<mmr::Rating<Self::Data>, AppError> {
+        self.inner.create_rating(player_id).await
     }
 
-    fn rate(
+    async fn rate(
         &self,
         rating: &mmr::RatingRecord<Self::Data>,
         matchups: &[mmr::Matchup<Self::Data>],
         period_elapsed: f32,
-    ) -> mmr::Rating<Self::Data> {
-        self.inner.rate(rating, matchups, period_elapsed)
+    ) -> Result<mmr::Rating<Self::Data>, AppError> {
+        self.inner.rate(rating, matchups, period_elapsed).await
     }
 
     fn period(&self) -> chrono::TimeDelta {
@@ -109,16 +109,16 @@ pub struct Unrated;
 impl mmr::Model for Unrated {
     type Data = ();
 
-    fn create_rating(&self, _player_id: i32) -> mmr::Rating<Self::Data> {
+    async fn create_rating(&self, _player_id: i32) -> Result<mmr::Rating<Self::Data>, AppError> {
         unimplemented!()
     }
 
-    fn rate(
+    async fn rate(
         &self,
         _rating: &mmr::RatingRecord<Self::Data>,
         _matchups: &[mmr::Matchup<Self::Data>],
         _period_elapsed: f32,
-    ) -> mmr::Rating<Self::Data> {
+    ) -> Result<mmr::Rating<Self::Data>, AppError> {
         unimplemented!()
     }
 

@@ -7,7 +7,9 @@ use std::{f32::consts::PI, sync::Arc};
 use chrono::TimeDelta;
 use serde::{Deserialize, Serialize};
 
-use super::{Model, Rating, RatingRecord};
+use crate::app::AppError;
+
+use super::{Model, ModelData, Rating, RatingRecord};
 
 pub const CONVERGENCE_TOLERANCE: f32 = 0.000_001;
 
@@ -34,23 +36,23 @@ impl From<Glicko2Config> for Glicko2 {
 impl Model for Glicko2 {
     type Data = Glicko2Data;
 
-    fn create_rating(&self, player_id: i32) -> Rating<Self::Data> {
-        Rating {
+    async fn create_rating(&self, player_id: i32) -> Result<Rating<Self::Data>, AppError> {
+        Ok(Rating {
             player_id,
             rating: self.config.defaults.rating,
             deviation: self.config.defaults.deviation,
             extra: Glicko2Data {
                 volatility: self.config.defaults.volatility,
             },
-        }
+        })
     }
 
-    fn rate(
+    async fn rate(
         &self,
         rating: &RatingRecord<Self::Data>,
         matchups: &[super::Matchup<Self::Data>],
         period_elapsed: f32,
-    ) -> Rating<Self::Data> {
+    ) -> Result<Rating<Self::Data>, AppError> {
         let matchups = matchups
             .iter()
             .map(|matchup| Matchup {
@@ -63,7 +65,7 @@ impl Model for Glicko2 {
             })
             .collect::<Vec<_>>();
 
-        rate(&self.config, rating, &matchups, period_elapsed)
+        Ok(rate(&self.config, rating, &matchups, period_elapsed))
     }
 
     fn period(&self) -> TimeDelta {
@@ -76,6 +78,8 @@ impl Model for Glicko2 {
 pub struct Glicko2Data {
     pub volatility: f32,
 }
+
+impl ModelData for Glicko2Data {}
 
 pub type Glicko2RatingRecord = RatingRecord<Glicko2Data>;
 

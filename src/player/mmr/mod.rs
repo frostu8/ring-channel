@@ -1,6 +1,7 @@
 //! Skill-based placements.
 
 pub mod glicko2;
+pub mod openskill;
 
 use std::any::Any;
 use std::fmt::Debug;
@@ -11,7 +12,7 @@ use chrono::{DateTime, TimeDelta, Utc};
 
 use ring_channel_model::battle::BattleStatus;
 use serde::{
-    Serialize,
+    Deserialize, Serialize,
     de::{DeserializeOwned, value::UnitDeserializer},
 };
 use sqlx::{FromRow, SqliteConnection};
@@ -20,12 +21,15 @@ use tracing::instrument;
 use crate::app::AppError;
 
 /// A rating model.
-pub trait Model {
+pub trait Model: Send + Sync {
     /// The associated data type used to make the model function.
-    type Data: Send + Sync + Serialize + DeserializeOwned + 'static;
+    type Data: ModelData + Serialize + DeserializeOwned + 'static;
 
     /// Initializes a new rating.
-    fn create_rating(&self, player_id: i32) -> Rating<Self::Data>;
+    fn create_rating(
+        &self,
+        player_id: i32,
+    ) -> impl Future<Output = Result<Rating<Self::Data>, AppError>> + Send + Sync;
 
     /// Rates a player's performance.
     ///
@@ -35,11 +39,20 @@ pub trait Model {
         rating: &RatingRecord<Self::Data>,
         matchups: &[Matchup<Self::Data>],
         period_elapsed: f32,
-    ) -> Rating<Self::Data>;
+    ) -> impl Future<Output = Result<Rating<Self::Data>, AppError>> + Send + Sync;
 
     /// The time between rating periods.
     fn period(&self) -> TimeDelta;
 }
+
+pub trait ModelData: Send + Sync + Sized + 'static {
+    /// The ordinal of the rating.
+    fn ordinal(rating: &Rating<Self>) -> f32 {
+        rating.rating - rating.deviation * 2.0
+    }
+}
+
+impl ModelData for () {}
 
 /// The rating period.
 #[derive(Clone, Debug, FromRow)]
@@ -52,7 +65,7 @@ pub struct RatingPeriod {
 }
 
 /// A matchup between two players.
-#[derive(Debug)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Matchup<T = ()> {
     /// The opponent of the player.
     pub opponent: RatingRecord<T>,
@@ -98,7 +111,7 @@ where
 ///
 /// The rating may also contain arbitrary info `T` for the relevant MMR system
 /// to query.
-#[derive(Clone, Debug, Deref, DerefMut)]
+#[derive(Clone, Debug, Deref, DerefMut, Deserialize, Serialize)]
 pub struct Rating<T = ()> {
     /// The id of the player this is for.
     pub player_id: i32,
@@ -109,6 +122,7 @@ pub struct Rating<T = ()> {
     /// Extra data for the rating system.
     #[deref]
     #[deref_mut]
+    #[serde(flatten)]
     pub extra: T,
 }
 
@@ -126,7 +140,7 @@ impl<T> Rating<T> {
 ///
 /// These are fetched from the database and are associated with a rating
 /// period.
-#[derive(Clone, Debug, Deref, DerefMut)]
+#[derive(Clone, Debug, Deref, DerefMut, Deserialize, Serialize)]
 pub struct RatingRecord<T = ()> {
     /// The id of the player this is for.
     pub player_id: i32,
@@ -141,6 +155,7 @@ pub struct RatingRecord<T = ()> {
     /// Extra data for the rating system.
     #[deref]
     #[deref_mut]
+    #[serde(flatten)]
     pub extra: T,
 }
 
@@ -271,7 +286,7 @@ where
 {
     let now = Utc::now();
 
-    let default_rating = model.create_rating(player_id);
+    let default_rating = model.create_rating(player_id).await?;
 
     // serialize extra data
     let extra = serialize_extra(&default_rating.extra).map_err(AppError::new)?;
@@ -375,7 +390,7 @@ where
     let matchups = fetch_matchups(rating.player_id, period.started_at, ends_at, &mut *conn).await?;
 
     // Get the player's new rating
-    let new_rating = model.rate(rating, &matchups, period.period_elapsed);
+    let new_rating = model.rate(rating, &matchups, period.period_elapsed).await?;
 
     // Cap deviation at certain value
     // TODO: move this into the glicko2 mod
@@ -504,7 +519,9 @@ where
                 fetch_matchups(player.player_id, period.started_at, ended_at, &mut *conn).await?;
 
             // Get the player's new rating
-            let new_rating = model.rate(&player, &matchups, period.period_elapsed);
+            let new_rating = model
+                .rate(&player, &matchups, period.period_elapsed)
+                .await?;
 
             let now = Utc::now();
 
@@ -617,7 +634,7 @@ where
 
         if matchups.len() > 0 {
             // Get the player's new rating
-            let new_rating = model.rate(&rating, &matchups, 1.0);
+            let new_rating = model.rate(&rating, &matchups, 1.0).await?;
 
             let csv_name = display_name.replace("\"", "\"\"");
 
