@@ -130,11 +130,11 @@ for line in sys.stdin:
             # Assess new rating
             for matchup in matchups:
                 opponent_rating = matchup.opponent.tomodel()
-                our_rank = 3 - matchup.position
+                opponent_position = 3 - matchup.position
 
                 [[new_rating], _] = model.rate(
                     [[new_rating], [opponent_rating]],
-                    [our_rank, matchup.position],
+                    [matchup.position, opponent_position],
                     limit_sigma=True,
                 )
 
