@@ -529,7 +529,7 @@ where
             let now = Utc::now();
 
             // serialize extra data
-            let extra = serialize_extra(&player.extra).map_err(AppError::new)?;
+            let extra = serialize_extra(&new_rating.extra).map_err(AppError::new)?;
 
             // Update the player's existing rating
             sqlx::query(
