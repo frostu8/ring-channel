@@ -35,8 +35,8 @@ use std::fmt::Debug;
 use crate::{
     app::{AppError, AppForm, AppGarde, AppJson, AppState, Model, Payload, error::AppErrorKind},
     auth::api_key::ServerAuthentication,
-    battle::{BattleSchema, calculate_winnings},
-    player::mmr::{self, Rating, RatingRecord, RawRating, RawRatingRecord, update_rating},
+    battle::{BattleSchema, calculate_winnings, update_participant_ratings},
+    player::mmr::{self, Rating, RawRating},
     room::BattleData,
 };
 
@@ -396,35 +396,7 @@ where
     if request.status == Some(BattleStatus::Concluded)
         || request.status == Some(BattleStatus::Cancelled)
     {
-        // update ratings for all players
-        let ratings = sqlx::query_as::<_, RawRatingRecord>(
-            r#"
-            SELECT r.*, pl.id
-            FROM participant p, player pl, rating r
-            WHERE
-                p.player_id = pl.id
-                AND r.player_id = pl.id
-                AND p.match_id = $1
-                AND r.id IN (
-                    SELECT id
-                    FROM rating
-                    WHERE player_id = pl.id
-                    ORDER BY inserted_at DESC
-                    LIMIT 1
-                )
-            "#,
-        )
-        .bind(battle_query.id)
-        .fetch_all(&mut *tx)
-        .await?;
-
-        // Only update if there was more than 1 participant
-        if ratings.len() > 1 {
-            for rating in ratings {
-                let rating = RatingRecord::<T::Data>::try_from(rating).map_err(AppError::new)?;
-                update_rating(&rating, &model, &mut *tx).await?;
-            }
-        }
+        update_participant_ratings(battle_query.id, &model, &mut *tx).await?;
     }
 
     // Create battle struct

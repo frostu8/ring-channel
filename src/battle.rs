@@ -1,8 +1,12 @@
 //! Battle functions and utilities.
 
-use std::cmp::{max, min};
+use std::{
+    cmp::{max, min},
+    fmt::Debug,
+};
 
 use chrono::{DateTime, Utc};
+
 use ring_channel_model::{
     Battle,
     battle::{BattleStatus, PlayerTeam},
@@ -12,7 +16,11 @@ use ring_channel_model::{
 
 use sqlx::{FromRow, SqliteConnection};
 
-use crate::{app::AppError, room::Room};
+use crate::{
+    app::AppError,
+    player::mmr::{Model, RatingRecord, RawRatingRecord, update_rating},
+    room::Room,
+};
 
 /// A schema for battles stored in database.
 ///
@@ -54,11 +62,54 @@ impl From<&BattleSchema> for Battle {
     }
 }
 
+/// Update ratings of all participants in a match.
+pub async fn update_participant_ratings<T>(
+    battle_id: i32,
+    model: &T,
+    conn: &mut SqliteConnection,
+) -> Result<(), AppError>
+where
+    T: Model + Debug,
+    T::Data: Debug,
+{
+    // update ratings for all players
+    let ratings = sqlx::query_as::<_, RawRatingRecord>(
+        r#"
+        SELECT r.*, pl.id
+        FROM participant p, player pl, rating r
+        WHERE
+            p.player_id = pl.id
+            AND r.player_id = pl.id
+            AND p.match_id = $1
+            AND r.id IN (
+                SELECT id
+                FROM rating
+                WHERE player_id = pl.id
+                ORDER BY inserted_at DESC
+                LIMIT 1
+            )
+        "#,
+    )
+    .bind(battle_id)
+    .fetch_all(&mut *conn)
+    .await?;
+
+    // Only update if there was more than 1 participant
+    if ratings.len() > 1 {
+        for rating in ratings {
+            let rating = RatingRecord::<T::Data>::try_from(rating).map_err(AppError::new)?;
+            update_rating(&rating, model, &mut *conn).await?;
+        }
+    }
+
+    Ok(())
+}
+
 /// Closes a match, divying up the pots in each.
 pub async fn calculate_winnings(
     battle_id: i32,
     room: &Room,
-    tx: &mut SqliteConnection,
+    conn: &mut SqliteConnection,
 ) -> Result<(), AppError> {
     #[derive(FromRow)]
     struct ParticipantQuery {
@@ -80,8 +131,8 @@ pub async fn calculate_winnings(
     // To figure out how much money we owe to each player, we first need to
     // figure out the total sum of each pot alone
 
-    let red_pot = get_total_pot(battle_id, PlayerTeam::Red, &mut *tx).await?;
-    let blue_pot = get_total_pot(battle_id, PlayerTeam::Blue, &mut *tx).await?;
+    let red_pot = get_total_pot(battle_id, PlayerTeam::Red, &mut *conn).await?;
+    let blue_pot = get_total_pot(battle_id, PlayerTeam::Blue, &mut *conn).await?;
 
     // If a pot has 0 mobiums to its name, nullify the wagers
     if red_pot <= 0 || blue_pot <= 0 {
@@ -103,7 +154,7 @@ pub async fn calculate_winnings(
         "#,
     )
     .bind(battle_id)
-    .fetch_optional(&mut *tx)
+    .fetch_optional(&mut *conn)
     .await?;
 
     // Do not divy pot up if there are no winners
@@ -125,7 +176,7 @@ pub async fn calculate_winnings(
         "#,
     )
     .bind(battle_id)
-    .fetch_all(&mut *tx)
+    .fetch_all(&mut *conn)
     .await?;
 
     for wager in wagers {
@@ -184,7 +235,7 @@ pub async fn calculate_winnings(
         .bind(mobiums_gained)
         .bind(mobiums_lost)
         .bind(wager.user_id)
-        .execute(&mut *tx)
+        .execute(&mut *conn)
         .await?;
 
         // Send mobiums change to player

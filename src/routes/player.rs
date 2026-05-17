@@ -9,8 +9,6 @@ use chrono::Utc;
 
 use http::StatusCode;
 
-use rand::{Rng, distr::Alphanumeric};
-
 use ring_channel_model::{Player, request::player::RegisterPlayerRequest};
 
 use sqlx::FromRow;
@@ -18,10 +16,10 @@ use sqlx::FromRow;
 use tracing::instrument;
 
 use crate::{
-    app::{AppError, AppJson, AppState, Model, Payload, error::AppErrorKind},
+    app::{AppError, AppJson, AppState, Model, Payload},
     auth::api_key::ServerAuthentication,
     player::{
-        get_player,
+        create_player, get_player,
         mmr::{self, Rating, RawRating, init_rating},
     },
 };
@@ -138,80 +136,25 @@ where
         ))
     } else {
         // this is a new player
-        let mut inserted_player = None::<UpsertQuery>;
+        let player = create_player(&request.public_key, &request.display_name, &mut *tx).await?;
 
-        for _ in 0..MAX_INSERT_ATTEMPTS {
-            // generate a short id
-            let short_id = rand::rng()
-                .sample_iter(Alphanumeric)
-                .take(6)
-                .map(char::from)
-                .map(|c| char::to_ascii_uppercase(&c))
-                .collect::<String>();
-
-            // try to insert with short_id
-            let result = sqlx::query_as::<_, UpsertQuery>(
-                r#"
-                INSERT INTO player
-                    (
-                        short_id,
-                        public_key,
-                        display_name,
-                        inserted_at,
-                        updated_at
-                    )
-                VALUES ($1, $2, $3, $4, $4)
-                RETURNING id AS player_id, short_id, display_name, rating, deviation, rating_extra
-                "#,
-            )
-            .bind(&short_id)
-            .bind(request.public_key.as_str())
-            .bind(&request.display_name)
-            .bind(now)
-            .fetch_one(&mut *tx)
-            .await;
-
-            match result {
-                Ok(player) => {
-                    inserted_player = Some(player);
-                    break;
-                }
-                Err(err) => {
-                    if let Some(db_err) = err.as_database_error() {
-                        // if this is a unique violation, simply try again
-                        if db_err.is_unique_violation() {
-                            tracing::debug!("unique key {} failed, regenerating", short_id);
-                        } else {
-                            return Err(err.into());
-                        }
-                    } else {
-                        return Err(err.into());
-                    }
-                }
-            }
-        }
-
-        if let Some(player) = inserted_player {
-            let rating = if model.ratings_enabled() {
-                // Add a historic rating for glicko2 to work
-                Some(init_rating(player.id, &model, &mut *tx).await?)
-            } else {
-                None
-            };
-
-            tx.commit().await?;
-
-            Ok((
-                StatusCode::CREATED,
-                AppJson(Player {
-                    id: player.short_id,
-                    mmr: rating.map(|rating| rating.ordinal() as i32),
-                    display_name: player.display_name,
-                    public_key: Some(request.public_key),
-                }),
-            ))
+        let rating = if model.ratings_enabled() {
+            // Add a historic rating for glicko2 to work
+            Some(init_rating(player.id, &model, &mut *tx).await?)
         } else {
-            Err(AppErrorKind::OutOfIds.into())
-        }
+            None
+        };
+
+        tx.commit().await?;
+
+        Ok((
+            StatusCode::CREATED,
+            AppJson(Player {
+                id: player.short_id,
+                mmr: rating.map(|rating| rating.ordinal() as i32),
+                display_name: player.display_name,
+                public_key: Some(request.public_key),
+            }),
+        ))
     }
 }

@@ -1,15 +1,19 @@
 pub mod mmr;
 
-use ring_channel_model::Player;
+use chrono::Utc;
+use rand::{Rng, SeedableRng, distr::Alphanumeric};
+use ring_channel_model::{Player, Rrid};
 use sqlx::{FromRow, SqliteConnection};
 
-use crate::app::{AppError, Model};
+use crate::app::{AppError, Model, error::AppErrorKind};
 
 use mmr::{Rating, RawRating};
 
+const MAX_INSERT_ATTEMPTS: usize = 5;
+
 /// A row in the database representing a player.
 #[derive(FromRow)]
-pub struct RawPlayer {
+pub struct PlayerRow {
     #[sqlx(rename = "player_id")]
     pub id: i32,
     pub short_id: String,
@@ -20,7 +24,7 @@ pub struct RawPlayer {
     pub extra: Option<String>,
 }
 
-impl RawPlayer {
+impl PlayerRow {
     /// Converts a raw player into an API-ready player.
     pub fn normalize<T>(self, model: &Model<T>) -> Result<Player, AppError>
     where
@@ -54,8 +58,8 @@ impl RawPlayer {
 pub async fn get_player(
     short_id: &str,
     conn: &mut SqliteConnection,
-) -> Result<Option<RawPlayer>, AppError> {
-    sqlx::query_as::<_, RawPlayer>(
+) -> Result<Option<PlayerRow>, AppError> {
+    sqlx::query_as::<_, PlayerRow>(
         r#"
         SELECT
             id AS player_id,
@@ -74,4 +78,83 @@ pub async fn get_player(
     .fetch_optional(&mut *conn)
     .await
     .map_err(AppError::from)
+}
+
+/// Inserts a player with a new short ID.
+pub async fn create_player(
+    public_key: &Rrid,
+    display_name: &str,
+    conn: &mut SqliteConnection,
+) -> Result<PlayerRow, AppError> {
+    let mut rng = rand::rngs::StdRng::from_os_rng();
+    create_player_with(public_key, display_name, conn, &mut rng).await
+}
+
+/// Inserts a player with a new short ID.
+pub async fn create_player_with<R>(
+    public_key: &Rrid,
+    display_name: &str,
+    conn: &mut SqliteConnection,
+    rng: &mut R,
+) -> Result<PlayerRow, AppError>
+where
+    R: Rng,
+{
+    let now = Utc::now();
+
+    // this is a new player
+    let mut inserted_player = None::<PlayerRow>;
+
+    for _ in 0..MAX_INSERT_ATTEMPTS {
+        // generate a short id
+        let short_id = rng
+            .sample_iter(Alphanumeric)
+            .take(6)
+            .map(char::from)
+            .map(|c| char::to_ascii_uppercase(&c))
+            .collect::<String>();
+
+        // try to insert with short_id
+        let result = sqlx::query_as::<_, PlayerRow>(
+            r#"
+            INSERT INTO player
+                (
+                    short_id,
+                    public_key,
+                    display_name,
+                    inserted_at,
+                    updated_at
+                )
+            VALUES ($1, $2, $3, $4, $4)
+            RETURNING id AS player_id, short_id, display_name, rating, deviation, rating_extra
+            "#,
+        )
+        .bind(&short_id)
+        .bind(public_key.as_str())
+        .bind(display_name)
+        .bind(now)
+        .fetch_one(&mut *conn)
+        .await;
+
+        match result {
+            Ok(player) => {
+                inserted_player = Some(player);
+                break;
+            }
+            Err(err) => {
+                if let Some(db_err) = err.as_database_error() {
+                    // if this is a unique violation, simply try again
+                    if db_err.is_unique_violation() {
+                        tracing::debug!("unique key {} failed, regenerating", short_id);
+                    } else {
+                        return Err(err.into());
+                    }
+                } else {
+                    return Err(err.into());
+                }
+            }
+        }
+    }
+
+    inserted_player.ok_or_else(|| AppErrorKind::OutOfIds.into())
 }

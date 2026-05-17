@@ -264,6 +264,16 @@ pub struct OpenSkillConfig {
     pub defaults: InitialRating,
 }
 
+impl OpenSkillConfig {
+    /// Builds a new `OpenSkill` model with the provided constants.
+    ///
+    /// This has to establish a connection to a process, so it is an
+    /// asynchronous operation.
+    pub async fn connect(self) -> anyhow::Result<OpenSkill> {
+        OpenSkill::new(self).await
+    }
+}
+
 impl Default for OpenSkillConfig {
     fn default() -> Self {
         OpenSkillConfig {

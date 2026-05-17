@@ -83,16 +83,20 @@ impl FromStr for Rrid {
 
     /// Creates a new Ring Racers ID from a checked string.
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        const ACCEPTED_CHARS: &str = "0123456789ABCDEFabcdef";
+        const ACCEPTED_CHARS: &[u8] = b"0123456789ABCDEFabcdef";
 
         if s.len() == 64 {
-            if s.chars().all(|ch| ACCEPTED_CHARS.contains(ch)) {
-                Ok(Rrid(s.to_owned()))
+            let idx = s
+                .as_bytes()
+                .iter()
+                .position(|ch| !ACCEPTED_CHARS.contains(ch));
+            if let Some(idx) = idx {
+                Err(RridParseError::InvalidChar { valid_up_to: idx })
             } else {
-                Err(RridParseError::InvalidChar)
+                Ok(Rrid(s.to_owned()))
             }
         } else {
-            Err(RridParseError::InvalidLength(s.len()))
+            Err(RridParseError::InvalidLength { len: s.len() })
         }
     }
 }
@@ -134,9 +138,15 @@ impl Serialize for Rrid {
 #[derive(Debug, Display, Error)]
 pub enum RridParseError {
     /// The RRID was of invalid length.
-    #[display("string was len {_0}, expected len 64")]
-    InvalidLength(#[error(not(source))] usize),
+    #[display("string was len {len}, expected len 64")]
+    InvalidLength {
+        #[error(not(source))]
+        len: usize,
+    },
     /// The RRID contained an invalid character.
-    #[display("string contained invalid characters")]
-    InvalidChar,
+    #[display("string contains invalid characters")]
+    InvalidChar {
+        #[error(not(source))]
+        valid_up_to: usize,
+    },
 }

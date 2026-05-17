@@ -13,6 +13,7 @@ WITH recent_ratings AS (
     	r.period_id = (
     		SELECT id
     		FROM rating_period
+            WHERE inserted_at < $3
     		ORDER BY inserted_at DESC
     		LIMIT 1
     	)

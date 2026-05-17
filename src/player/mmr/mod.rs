@@ -436,7 +436,18 @@ where
     T: Model,
 {
     let now = Utc::now();
+    next_rating_period_at(model, now, conn).await
+}
 
+/// Fetches the last start of the rating period at the given time.
+pub async fn next_rating_period_at<T>(
+    model: &T,
+    now: DateTime<Utc>,
+    conn: &mut SqliteConnection,
+) -> Result<RatingPeriod, AppError>
+where
+    T: Model,
+{
     let period = sqlx::query_as::<_, RatingPeriod>(
         r#"
         SELECT *
@@ -686,5 +697,147 @@ where
         Some(data) => ron::from_str(data).map_err(|error| error.code),
         // No extra data should have been serialized
         None => D::deserialize(UnitDeserializer::new()),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use ring_channel_model::Rrid;
+    use sqlx::sqlite::SqlitePoolOptions;
+    use uuid::Uuid;
+
+    use crate::{
+        battle::update_participant_ratings,
+        player::{create_player, get_player, mmr::openskill::OpenSkillData},
+    };
+
+    use super::*;
+
+    #[tokio::test]
+    async fn test_rating_period1() {
+        let db = SqlitePoolOptions::new().connect(":memory:").await.unwrap();
+        sqlx::migrate!("./migrations").run(&db).await.unwrap();
+        let mut conn = db.acquire().await.unwrap();
+
+        // Create openskill model
+        let model = openskill::OpenSkillConfig::default()
+            .connect()
+            .await
+            .expect("valid openskill model");
+
+        // Create players
+        let player1 = create_player(
+            &Rrid::new("26ABFC4C5960182E8FE20203A1634E9ECB42BBFCCF8CE2965306213E5C75E921").unwrap(),
+            "Metal Sonic",
+            &mut *conn,
+        )
+        .await
+        .unwrap();
+        let player2 = create_player(
+            &Rrid::new("384F5460E7C95047245E92E7249AF019FB5215A7ABED748CF25FB1EA24B39443").unwrap(),
+            "Phil's Pills",
+            &mut *conn,
+        )
+        .await
+        .unwrap();
+
+        // Create ratings
+        init_rating(player1.id, &model, &mut *conn)
+            .await
+            .expect("valid rating initialization");
+        init_rating(player2.id, &model, &mut *conn)
+            .await
+            .expect("valid rating initialization");
+
+        // Register battle
+        let now = Utc::now();
+        let uuid = Uuid::new_v4();
+        let (battle_id,) = sqlx::query_as::<_, (i32,)>(
+            r#"
+            INSERT INTO battle (uuid, level_name, inserted_at, concluded_at, closed_at, status)
+            VALUES ($1, $2, $3, $3, $3, $4)
+            RETURNING id
+            "#,
+        )
+        .bind(uuid.hyphenated().to_string())
+        .bind("Withering Chateau Zone")
+        .bind(now)
+        .bind(u8::from(BattleStatus::Concluded))
+        .fetch_one(&mut *conn)
+        .await
+        .unwrap();
+
+        for (i, player) in [&player1, &player2].into_iter().enumerate() {
+            let no_contest = i == 1;
+            let finish_time = if no_contest { None } else { Some(3050) };
+
+            // add player to match
+            sqlx::query(
+                r#"
+                INSERT INTO participant
+                    (match_id, player_id, team, skin, kart_speed, kart_weight, no_contest, finish_time)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+                "#,
+            )
+            .bind(battle_id)
+            .bind(player.id)
+            .bind(i as u8)
+            .bind("aigis")
+            .bind(6)
+            .bind(7)
+            .bind(no_contest)
+            .bind(finish_time)
+            .execute(&mut *conn)
+            .await
+            .unwrap();
+        }
+
+        // update ratings for all players
+        update_participant_ratings(battle_id, &model, &mut *conn)
+            .await
+            .unwrap();
+
+        async fn get_rating(
+            short_id: &str,
+            conn: &mut SqliteConnection,
+        ) -> anyhow::Result<Rating<OpenSkillData>> {
+            get_player(&short_id, &mut *conn)
+                .await?
+                .and_then(|r| match r.rating.zip(r.deviation) {
+                    Some((rating, deviation)) => Some(RawRating {
+                        player_id: r.id,
+                        rating,
+                        deviation,
+                        extra: r.extra,
+                    }),
+                    None => None,
+                })
+                .ok_or_else(|| anyhow::anyhow!("player doesn't exist"))?
+                .try_into()
+                .map_err(From::from)
+        }
+
+        let rating1before = get_rating(&player1.short_id, &mut *conn).await.unwrap();
+        let rating2before = get_rating(&player2.short_id, &mut *conn).await.unwrap();
+
+        let later = now + model.period() * 2;
+
+        next_rating_period_at(&model, later, &mut *conn)
+            .await
+            .unwrap();
+
+        let rating1after = get_rating(&player1.short_id, &mut *conn).await.unwrap();
+        let rating2after = get_rating(&player2.short_id, &mut *conn).await.unwrap();
+
+        assert_eq!(
+            rating1before.ordinal(),
+            rating1after.ordinal(),
+            "rating 1 neq"
+        );
+        assert_eq!(
+            rating2before.ordinal(),
+            rating2after.ordinal(),
+            "rating 2 neq"
+        );
     }
 }
