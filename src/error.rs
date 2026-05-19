@@ -1,9 +1,9 @@
 //! Application error that may occur during the processing of a request.
 //!
-//! See [`AppError`].
+//! See [`Error`].
 
 use std::{
-    error::Error,
+    error::Error as StdError,
     fmt::{self, Display, Formatter},
     sync::Arc,
 };
@@ -20,53 +20,52 @@ use derive_more::{Display, From};
 use http::StatusCode;
 
 use ring_channel_model::ApiError;
+
 use uuid::Uuid;
 
 use crate::app::AppJson;
-
-pub type BoxError = Box<dyn Error + Send + Sync + 'static>;
 
 /// Application error that may occur during the processing of a request.
 ///
 /// This includes both internal errors and user errors.
 #[derive(Debug)]
-pub struct AppError {
-    kind: AppErrorKind,
+pub struct Error {
+    kind: ErrorKind,
     message: Option<String>,
 }
 
-impl AppError {
+impl Error {
     /// Constucts an internal error.
-    pub fn new<E: Error + Send + Sync + 'static>(e: E) -> AppError {
-        AppError {
-            kind: AppErrorKind::Other(Box::new(e)),
+    pub fn new<E: StdError + Send + Sync + 'static>(e: E) -> Error {
+        Error {
+            kind: ErrorKind::Other(eyre::Report::new(e)),
             message: None,
         }
     }
 
     /// Constructs a new not found error.
-    pub fn not_found(message: impl Into<String>) -> AppError {
-        AppError {
-            kind: AppErrorKind::NotFound,
+    pub fn not_found(message: impl Into<String>) -> Error {
+        Error {
+            kind: ErrorKind::NotFound,
             message: Some(message.into()),
         }
     }
 
     /// Adds a custom message to the error.
-    pub fn with_message(self, message: impl Into<String>) -> AppError {
-        AppError {
+    pub fn with_message(self, message: impl Into<String>) -> Error {
+        Error {
             message: Some(message.into()),
             ..self
         }
     }
 
     /// The inner [`AppErrorKind`] of the error.
-    pub fn kind(&self) -> &AppErrorKind {
+    pub fn kind(&self) -> &ErrorKind {
         &self.kind
     }
 
     /// Discards the error message, unwrapping the inner error.
-    pub fn into_kind(self) -> AppErrorKind {
+    pub fn into_kind(self) -> ErrorKind {
         self.kind
     }
 
@@ -74,13 +73,13 @@ impl AppError {
     pub fn is_internal(&self) -> bool {
         matches!(
             self.kind,
-            AppErrorKind::Database(_)
-                | AppErrorKind::WebSocket(_)
-                | AppErrorKind::Session(_)
-                | AppErrorKind::HttpClient(_)
-                | AppErrorKind::Discord(_)
-                | AppErrorKind::OutOfIds
-                | AppErrorKind::Other(_)
+            ErrorKind::Database(_)
+                | ErrorKind::WebSocket(_)
+                | ErrorKind::Session(_)
+                | ErrorKind::HttpClient(_)
+                | ErrorKind::Discord(_)
+                | ErrorKind::OutOfIds
+                | ErrorKind::Other(_)
         )
     }
 
@@ -92,115 +91,115 @@ impl AppError {
 
     fn to_status_and_api_error(self) -> (StatusCode, ApiError) {
         let (status, mut error) = match self.kind {
-            AppErrorKind::NotFound => (
+            ErrorKind::NotFound => (
                 StatusCode::NOT_FOUND,
                 ApiError {
                     message: "Resource not found".into(),
                 },
             ),
-            error_kind @ AppErrorKind::AlreadyConcluded(_) => (
+            error_kind @ ErrorKind::AlreadyConcluded(_) => (
                 StatusCode::BAD_REQUEST,
                 ApiError {
                     message: error_kind.to_string(),
                 },
             ),
-            error_kind @ AppErrorKind::MissingParticipant(_) => (
+            error_kind @ ErrorKind::MissingParticipant(_) => (
                 StatusCode::BAD_REQUEST,
                 ApiError {
                     message: error_kind.to_string(),
                 },
             ),
-            AppErrorKind::Garde(error) => (
+            ErrorKind::Garde(error) => (
                 StatusCode::BAD_REQUEST,
                 ApiError {
                     message: error.to_string(),
                 },
             ),
-            AppErrorKind::Json(error) => (
+            ErrorKind::Json(error) => (
                 StatusCode::BAD_REQUEST,
                 ApiError {
                     message: error.to_string(),
                 },
             ),
-            AppErrorKind::SerdeJson(error) => (
+            ErrorKind::SerdeJson(error) => (
                 StatusCode::BAD_REQUEST,
                 ApiError {
                     message: error.to_string(),
                 },
             ),
-            AppErrorKind::Form(error) => (
+            ErrorKind::Form(error) => (
                 StatusCode::BAD_REQUEST,
                 ApiError {
                     message: error.to_string(),
                 },
             ),
-            AppErrorKind::UnsupportedContentType(mime) => (
+            ErrorKind::UnsupportedContentType(mime) => (
                 StatusCode::BAD_REQUEST,
                 ApiError {
                     message: format!("Unrecognized MIME type: {}", mime),
                 },
             ),
-            AppErrorKind::MissingContentType => (
+            ErrorKind::MissingContentType => (
                 StatusCode::BAD_REQUEST,
                 ApiError {
                     message: "Missing request content type".into(),
                 },
             ),
-            AppErrorKind::ApiKeyUnauthenticated => (
+            ErrorKind::ApiKeyUnauthenticated => (
                 StatusCode::UNAUTHORIZED,
                 ApiError {
                     message: "No API key passed; set an X-API-Key header!".into(),
                 },
             ),
-            AppErrorKind::ApiKeyBadCredentials => (
+            ErrorKind::ApiKeyBadCredentials => (
                 StatusCode::UNAUTHORIZED,
                 ApiError {
                     message: "API key was malformed".into(),
                 },
             ),
-            AppErrorKind::UserUnauthenticated => (
+            ErrorKind::UserUnauthenticated => (
                 StatusCode::UNAUTHORIZED,
                 ApiError {
                     message: "User is unauthenticated".into(),
                 },
             ),
-            AppErrorKind::InvalidSession => (
+            ErrorKind::InvalidSession => (
                 StatusCode::UNAUTHORIZED,
                 ApiError {
                     message: "Session is invalid or bad; perhaps this is an old cookie?".into(),
                 },
             ),
-            AppErrorKind::InvalidState { .. } => (
+            ErrorKind::InvalidState { .. } => (
                 StatusCode::BAD_REQUEST,
                 ApiError {
                     message: "Invalid state sent".into(),
                 },
             ),
-            AppErrorKind::CookieFetch((code, message)) => (
+            ErrorKind::CookieFetch((code, message)) => (
                 code,
                 ApiError {
                     message: message.into(),
                 },
             ),
-            AppErrorKind::MissingHostHeader => (
+            ErrorKind::MissingHostHeader => (
                 StatusCode::BAD_REQUEST,
                 ApiError {
                     message: "Missing Host header".into(),
                 },
             ),
-            AppErrorKind::InvalidCsrfToken => (
+            ErrorKind::InvalidCsrfToken => (
                 StatusCode::BAD_REQUEST,
                 ApiError {
                     message: "Invalid csrf token passed".into(),
                 },
             ),
-            AppErrorKind::NotEnoughMobiums => (
+            ErrorKind::NotEnoughMobiums => (
                 StatusCode::BAD_REQUEST,
                 ApiError {
                     message: "You don't have that kind of money :(".into(),
                 },
             ),
-            AppErrorKind::InvalidData(message) => (StatusCode::BAD_REQUEST, ApiError { message }),
+            ErrorKind::InvalidData(message) => (StatusCode::BAD_REQUEST, ApiError { message }),
             // fallthrough for internal server errors not turned into user
             // errors here
             _error_kind => (
@@ -220,7 +219,7 @@ impl AppError {
     }
 }
 
-impl Display for AppError {
+impl Display for Error {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match self.message.as_ref() {
             Some(msg) => f.write_str(msg),
@@ -229,29 +228,29 @@ impl Display for AppError {
     }
 }
 
-impl Error for AppError {
-    fn source(&self) -> Option<&(dyn Error + 'static)> {
+impl StdError for Error {
+    fn source(&self) -> Option<&(dyn StdError + 'static)> {
         match &self.kind {
-            AppErrorKind::Json(err) => Some(err),
-            AppErrorKind::Form(err) => Some(err),
-            AppErrorKind::Database(err) => Some(err),
-            AppErrorKind::Session(err) => Some(err),
-            AppErrorKind::WebSocket(err) => Some(err),
-            AppErrorKind::HttpClient(err) => Some(err),
-            AppErrorKind::Discord(err) => Some(err),
-            AppErrorKind::Garde(err) => Some(err),
-            AppErrorKind::Other(err) => err.source(),
+            ErrorKind::Json(err) => Some(err),
+            ErrorKind::Form(err) => Some(err),
+            ErrorKind::Database(err) => Some(err),
+            ErrorKind::Session(err) => Some(err),
+            ErrorKind::WebSocket(err) => Some(err),
+            ErrorKind::HttpClient(err) => Some(err),
+            ErrorKind::Discord(err) => Some(err),
+            ErrorKind::Garde(err) => Some(err),
+            ErrorKind::Other(err) => err.source(),
             _ => None,
         }
     }
 }
 
-impl<T> From<T> for AppError
+impl<T> From<T> for Error
 where
-    T: Into<AppErrorKind>,
+    T: Into<ErrorKind>,
 {
     fn from(value: T) -> Self {
-        AppError {
+        Error {
             kind: value.into(),
             message: None,
         }
@@ -261,7 +260,7 @@ where
 /// The specific kind of error that happened.
 #[derive(Debug, Display, From)]
 #[non_exhaustive]
-pub enum AppErrorKind {
+pub enum ErrorKind {
     /// The request's JSON payload was malformed or invalid.
     #[display("{_0}")]
     Json(JsonRejection),
@@ -341,15 +340,15 @@ pub enum AppErrorKind {
     /// Only the message is preserved! All errors of this kind are internal.
     /// Use as a last resort.
     #[from(ignore)]
-    Other(BoxError),
+    Other(eyre::Report),
 }
 
-impl IntoResponse for AppError {
+impl IntoResponse for Error {
     fn into_response(mut self) -> Response {
         let mut internal_error = None;
 
         let (status, error) = if self.is_internal() {
-            internal_error = Some(AppError {
+            internal_error = Some(Error {
                 kind: self.kind,
                 message: self.message.take(),
             });

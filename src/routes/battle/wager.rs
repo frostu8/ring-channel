@@ -16,7 +16,8 @@ use sqlx::{Acquire, FromRow, SqliteConnection};
 use uuid::Uuid;
 
 use crate::{
-    app::{AppError, AppJson, AppState, Payload, error::AppErrorKind},
+    app::{AppJson, AppState, Payload},
+    error::{Error, ErrorKind},
     routes::battle::get_battle_id,
     session::{Session, SessionUser},
     user::{UserSchema, bot::get_wager_bot},
@@ -26,7 +27,7 @@ use crate::{
 pub async fn list(
     Path((match_id,)): Path<(Uuid,)>,
     State(state): State<AppState>,
-) -> Result<AppJson<Vec<BattleWager>>, AppError> {
+) -> Result<AppJson<Vec<BattleWager>>, Error> {
     let mut conn = state.db.acquire().await?;
 
     #[derive(FromRow)]
@@ -93,7 +94,7 @@ pub async fn show_self(
     Path((match_id,)): Path<(Uuid,)>,
     session: SessionUser,
     State(state): State<AppState>,
-) -> Result<AppJson<BattleWager>, AppError> {
+) -> Result<AppJson<BattleWager>, Error> {
     let mut conn = state.db.acquire().await?;
 
     #[derive(FromRow)]
@@ -137,7 +138,7 @@ pub async fn show_self(
     .await?;
 
     let Some(query) = query else {
-        return Err(AppError::not_found("Wager not found"));
+        return Err(Error::not_found("Wager not found"));
     };
 
     Ok(AppJson(BattleWager {
@@ -160,7 +161,7 @@ pub async fn show_self(
 pub async fn show(
     Path((match_id, username)): Path<(Uuid, String)>,
     State(state): State<AppState>,
-) -> Result<AppJson<BattleWager>, AppError> {
+) -> Result<AppJson<BattleWager>, Error> {
     let mut conn = state.db.acquire().await?;
 
     #[derive(FromRow)]
@@ -203,7 +204,7 @@ pub async fn show(
     .await?;
 
     let Some(query) = query else {
-        return Err(AppError::not_found("Wager not found"));
+        return Err(Error::not_found("Wager not found"));
     };
 
     Ok(AppJson(BattleWager {
@@ -229,7 +230,7 @@ pub async fn create(
     mut session: Session,
     State(state): State<AppState>,
     Payload(update_wager): Payload<UpdateWager>,
-) -> Result<AppJson<BattleWager>, AppError> {
+) -> Result<AppJson<BattleWager>, Error> {
     #[derive(FromRow)]
     struct BattleQuery {
         id: i32,
@@ -240,15 +241,15 @@ pub async fn create(
 
     // reject any suspicious requests
     if session.csrf != update_wager.csrf {
-        return Err(AppErrorKind::InvalidCsrfToken.into());
+        return Err(ErrorKind::InvalidCsrfToken.into());
     }
 
     if update_wager.mobiums < 0 {
-        return Err(AppErrorKind::InvalidData("Mobiums must be non-negative".into()).into());
+        return Err(ErrorKind::InvalidData("Mobiums must be non-negative".into()).into());
     }
 
     if update_wager.mobiums > user.mobiums {
-        return Err(AppErrorKind::NotEnoughMobiums.into());
+        return Err(ErrorKind::NotEnoughMobiums.into());
     }
 
     let now = Utc::now();
@@ -279,17 +280,17 @@ pub async fn create(
     .await?;
 
     let Some(battle) = battle else {
-        return Err(AppError::not_found(format!("Match {} not found", match_id)));
+        return Err(Error::not_found(format!("Match {} not found", match_id)));
     };
 
     // matches that aren't ongoing are automatically closed
     if battle.status != BattleStatus::Ongoing {
-        return Err(AppErrorKind::InvalidData("Bets have closed for this match.".into()).into());
+        return Err(ErrorKind::InvalidData("Bets have closed for this match.".into()).into());
     }
 
     // give a little bit of wiggle room to prevent jebaits
     if battle.closed_at + Duration::seconds(3) < now {
-        return Err(AppErrorKind::InvalidData("Bets have closed for this match.".into()).into());
+        return Err(ErrorKind::InvalidData("Bets have closed for this match.".into()).into());
     }
 
     // check if the user's team actually exists
@@ -306,7 +307,7 @@ pub async fn create(
     .await?;
 
     if team_count <= 0 {
-        return Err(AppErrorKind::InvalidData(format!(
+        return Err(ErrorKind::InvalidData(format!(
             "Team {:?} has no participants",
             update_wager.victor
         ))
@@ -372,7 +373,7 @@ async fn rebalance_automated_wagers(
     wager_bot: &UserSchema,
     battle_id: i32,
     conn: &mut SqliteConnection,
-) -> Result<(), AppError> {
+) -> Result<(), Error> {
     #[derive(Debug, FromRow)]
     struct WagerCountQuery {
         #[sqlx(try_from = "u8")]

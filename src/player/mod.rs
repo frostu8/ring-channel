@@ -5,7 +5,10 @@ use rand::{Rng, SeedableRng, distr::Alphanumeric};
 use ring_channel_model::{Player, Rrid};
 use sqlx::{FromRow, SqliteConnection};
 
-use crate::app::{AppError, Model, error::AppErrorKind};
+use crate::{
+    app::Model,
+    error::{Error, ErrorKind},
+};
 
 use mmr::{Rating, RawRating};
 
@@ -26,7 +29,7 @@ pub struct PlayerRow {
 
 impl PlayerRow {
     /// Converts a raw player into an API-ready player.
-    pub fn normalize<T>(self, model: &Model<T>) -> Result<Player, AppError>
+    pub fn normalize<T>(self, model: &Model<T>) -> Result<Player, Error>
     where
         T: mmr::Model + 'static,
     {
@@ -40,7 +43,7 @@ impl PlayerRow {
                 extra: self.extra,
             };
 
-            Some(Rating::<T::Data>::try_from(rating).map_err(AppError::new)?)
+            Some(Rating::<T::Data>::try_from(rating).map_err(Error::new)?)
         } else {
             None
         };
@@ -58,7 +61,7 @@ impl PlayerRow {
 pub async fn get_player(
     short_id: &str,
     conn: &mut SqliteConnection,
-) -> Result<Option<PlayerRow>, AppError> {
+) -> Result<Option<PlayerRow>, Error> {
     sqlx::query_as::<_, PlayerRow>(
         r#"
         SELECT
@@ -77,7 +80,7 @@ pub async fn get_player(
     .bind(short_id)
     .fetch_optional(&mut *conn)
     .await
-    .map_err(AppError::from)
+    .map_err(Error::from)
 }
 
 /// Inserts a player with a new short ID.
@@ -85,7 +88,7 @@ pub async fn create_player(
     public_key: &Rrid,
     display_name: &str,
     conn: &mut SqliteConnection,
-) -> Result<PlayerRow, AppError> {
+) -> Result<PlayerRow, Error> {
     let mut rng = rand::rngs::StdRng::from_os_rng();
     create_player_with(public_key, display_name, conn, &mut rng).await
 }
@@ -96,7 +99,7 @@ pub async fn create_player_with<R>(
     display_name: &str,
     conn: &mut SqliteConnection,
     rng: &mut R,
-) -> Result<PlayerRow, AppError>
+) -> Result<PlayerRow, Error>
 where
     R: Rng,
 {
@@ -156,5 +159,5 @@ where
         }
     }
 
-    inserted_player.ok_or_else(|| AppErrorKind::OutOfIds.into())
+    inserted_player.ok_or_else(|| ErrorKind::OutOfIds.into())
 }

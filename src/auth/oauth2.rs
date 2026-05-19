@@ -1,6 +1,6 @@
 //! OAuth Authorization Grant flow.
 
-use anyhow::Error;
+use eyre::Error;
 
 use oauth2::{
     AuthUrl, ClientId, ClientSecret, EndpointNotSet, EndpointSet, RedirectUrl, RevocationUrl,

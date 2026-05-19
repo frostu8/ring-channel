@@ -30,7 +30,10 @@ use serde::{Deserialize, Serialize};
 
 use tower_sessions::Session as TowerSession;
 
-use crate::app::{AppError, AppState, error::AppErrorKind};
+use crate::{
+    app::AppState,
+    error::{Error, ErrorKind},
+};
 
 pub type SessionError = tower_sessions::session::Error;
 
@@ -118,17 +121,17 @@ impl<S> FromRequestParts<S> for Session
 where
     S: Send + Sync,
 {
-    type Rejection = AppError;
+    type Rejection = Error;
 
     async fn from_request_parts(parts: &mut Parts, _state: &S) -> Result<Self, Self::Rejection> {
         let session = parts
             .extract::<TowerSession>()
             .await
-            .map_err(AppErrorKind::CookieFetch)?;
+            .map_err(ErrorKind::CookieFetch)?;
         let cookie_jar = parts
             .extract::<Cookies>()
             .await
-            .map_err(AppErrorKind::CookieFetch)?;
+            .map_err(ErrorKind::CookieFetch)?;
 
         let session_data = if let Some(session_data) = session.get(Session::SESSION_KEY).await? {
             session_data
@@ -183,7 +186,7 @@ where
     AppState: FromRef<S>,
     S: Send + Sync,
 {
-    type Rejection = AppError;
+    type Rejection = Error;
 
     async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, Self::Rejection> {
         #[derive(FromRow)]
@@ -234,10 +237,10 @@ where
                     identity,
                 })
             } else {
-                Err(AppErrorKind::InvalidSession.into())
+                Err(ErrorKind::InvalidSession.into())
             }
         } else {
-            Err(AppErrorKind::UserUnauthenticated.into())
+            Err(ErrorKind::UserUnauthenticated.into())
         }
     }
 }

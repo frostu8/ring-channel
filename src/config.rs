@@ -15,7 +15,7 @@ use ring_channel_model::user::to_username_lossy;
 
 use serde::{Deserialize, Deserializer, Serialize, Serializer, de::Error as _};
 
-use anyhow::Error;
+use eyre::Error;
 
 use crate::player::mmr::{glicko2::Glicko2Config, openskill::OpenSkillConfig};
 

@@ -5,15 +5,12 @@ use axum::{
     response::Response,
 };
 
-use crate::{
-    app::{AppError, AppState},
-    session::SessionUser,
-};
+use crate::{app::AppState, error::Error, session::SessionUser};
 
 /// Establishes a connection to the websocket gateway.
 #[axum::debug_handler]
 pub async fn handler(
-    user: Result<SessionUser, AppError>,
+    user: Result<SessionUser, Error>,
     State(state): State<AppState>,
     ws: WebSocketUpgrade,
 ) -> Response {

@@ -7,6 +7,7 @@ use std::{
 };
 
 use chrono::TimeDelta;
+use eyre::OptionExt as _;
 use serde::{Deserialize, Serialize};
 use tokio::{
     io::{AsyncBufReadExt, AsyncWriteExt, BufReader},
@@ -14,7 +15,7 @@ use tokio::{
     sync::RwLock,
 };
 
-use crate::app::AppError;
+use crate::error::Error;
 
 use super::{Matchup, Model, ModelData, Rating, RatingRecord};
 
@@ -30,7 +31,7 @@ pub struct OpenSkill {
 
 impl OpenSkill {
     /// Creates a new `OpenSkill` interface.
-    pub async fn new(config: OpenSkillConfig) -> Result<OpenSkill, anyhow::Error> {
+    pub async fn new(config: OpenSkillConfig) -> eyre::Result<OpenSkill> {
         let command_parts = config
             .command
             .split(char::is_whitespace)
@@ -45,15 +46,12 @@ impl OpenSkill {
             .spawn()?;
 
         let mut process = Process {
-            stdin: child
-                .stdin
-                .take()
-                .ok_or(anyhow::Error::msg("no stdin exposed"))?,
+            stdin: child.stdin.take().ok_or_eyre("no stdin exposed")?,
             stdout: child
                 .stdout
                 .take()
                 .map(BufReader::new)
-                .ok_or(anyhow::Error::msg("no stdout exposed"))?,
+                .ok_or_eyre("no stdout exposed")?,
             _child: child,
         };
 
@@ -74,13 +72,13 @@ impl OpenSkill {
 impl Model for OpenSkill {
     type Data = OpenSkillData;
 
-    async fn create_rating(&self, player_id: i32) -> Result<Rating<Self::Data>, AppError> {
+    async fn create_rating(&self, player_id: i32) -> Result<Rating<Self::Data>, Error> {
         let mut process = self.process.write().await;
 
         let data = process.request(CreateRatingRequest { player_id }).await?;
         match data {
             Response::CreateRating(resp) => Ok(resp.rating),
-            _ => Err(AppError::new(UnexpectedResponse)),
+            _ => Err(Error::new(UnexpectedResponse)),
         }
     }
 
@@ -89,7 +87,7 @@ impl Model for OpenSkill {
         rating: &RatingRecord<Self::Data>,
         matchups: &[Matchup<Self::Data>],
         _period_elapsed: f32,
-    ) -> Result<Rating<Self::Data>, AppError> {
+    ) -> Result<Rating<Self::Data>, Error> {
         let mut process = self.process.write().await;
 
         let data = process
@@ -100,7 +98,7 @@ impl Model for OpenSkill {
             .await?;
         match data {
             Response::Rate(resp) => Ok(resp.new_rating),
-            _ => Err(AppError::new(UnexpectedResponse)),
+            _ => Err(Error::new(UnexpectedResponse)),
         }
     }
 
@@ -219,31 +217,28 @@ struct Process {
 
 impl Process {
     /// Sends a request and gets a response back.
-    pub async fn request<T>(&mut self, request: T) -> Result<Response, AppError>
+    pub async fn request<T>(&mut self, request: T) -> Result<Response, Error>
     where
         T: Into<Request>,
     {
         let request = request.into();
 
         // Serialize request
-        let mut body = serde_json::to_string(&request).map_err(AppError::new)?;
+        let mut body = serde_json::to_string(&request).map_err(Error::new)?;
         body.push('\n');
 
         // Write body
         self.stdin
             .write_all(body.as_bytes())
             .await
-            .map_err(AppError::new)?;
+            .map_err(Error::new)?;
 
         // Read result
         body.clear();
-        self.stdout
-            .read_line(&mut body)
-            .await
-            .map_err(AppError::new)?;
+        self.stdout.read_line(&mut body).await.map_err(Error::new)?;
 
         // Deserialize
-        serde_json::from_str::<Response>(body.trim()).map_err(AppError::new)
+        serde_json::from_str::<Response>(body.trim()).map_err(Error::new)
     }
 }
 
@@ -269,7 +264,7 @@ impl OpenSkillConfig {
     ///
     /// This has to establish a connection to a process, so it is an
     /// asynchronous operation.
-    pub async fn connect(self) -> anyhow::Result<OpenSkill> {
+    pub async fn connect(self) -> eyre::Result<OpenSkill> {
         OpenSkill::new(self).await
     }
 }

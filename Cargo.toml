@@ -11,7 +11,6 @@ tracy = ["tracing-tracy"]
 
 [dependencies]
 ring-channel-model = { workspace = true }
-anyhow = "1"
 axum = { version = "0.8", features = ["macros", "ws"] }
 axum-server = "0.7"
 chrono = { workspace = true }
@@ -52,6 +51,7 @@ humantime = "2"
 tokio-cron-scheduler = { version = "0.15", features = ["signal"] }
 tracing-tracy = { version = "0.11", features = ["enable"], optional = true }
 ron = "0.12.1"
+eyre = "0.6.12"
 
 [workspace]
 resolver = "3"

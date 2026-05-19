@@ -9,8 +9,9 @@ use chrono::Utc;
 use ring_channel_model::{chat::Message, request::chat::CreateChatMessage};
 
 use crate::{
-    app::{AppError, AppJson, AppState, Model, Payload},
+    app::{AppJson, AppState, Model, Payload},
     auth::api_key::ServerAuthentication,
+    error::Error,
     player::{get_player, mmr},
 };
 
@@ -20,7 +21,7 @@ pub async fn create<T>(
     State(state): State<AppState>,
     _auth_guard: ServerAuthentication,
     Payload(request): Payload<CreateChatMessage>,
-) -> Result<AppJson<Message>, AppError>
+) -> Result<AppJson<Message>, Error>
 where
     T: mmr::Model + 'static,
 {
@@ -32,7 +33,7 @@ where
     let player = get_player(&request.player_id, &mut conn)
         .await
         .and_then(|f| {
-            f.ok_or_else(|| AppError::not_found(format!("Player {} not found", request.player_id)))
+            f.ok_or_else(|| Error::not_found(format!("Player {} not found", request.player_id)))
         })?;
 
     sqlx::query(

@@ -33,9 +33,10 @@ use uuid::Uuid;
 use std::fmt::Debug;
 
 use crate::{
-    app::{AppError, AppForm, AppGarde, AppJson, AppState, Model, Payload, error::AppErrorKind},
+    app::{AppForm, AppGarde, AppJson, AppState, Model, Payload},
     auth::api_key::ServerAuthentication,
     battle::{BattleSchema, calculate_winnings, update_participant_ratings},
+    error::{Error, ErrorKind},
     player::mmr::{self, Rating, RawRating},
     room::BattleData,
 };
@@ -63,7 +64,7 @@ pub async fn list<T>(
     Extension(model): Extension<Model<T>>,
     State(state): State<AppState>,
     AppGarde(AppForm(query)): AppGarde<AppForm<ListBattlesQuery>>,
-) -> Result<AppJson<Vec<Battle>>, AppError>
+) -> Result<AppJson<Vec<Battle>>, Error>
 where
     T: mmr::Model + 'static,
 {
@@ -106,7 +107,7 @@ pub async fn show<T>(
     Path((uuid,)): Path<(Uuid,)>,
     Extension(model): Extension<Model<T>>,
     State(state): State<AppState>,
-) -> Result<AppJson<Battle>, AppError>
+) -> Result<AppJson<Battle>, Error>
 where
     T: mmr::Model + 'static,
 {
@@ -124,7 +125,7 @@ where
     .await?;
 
     let Some(battle) = battle else {
-        return Err(AppError::not_found(format!("Match {} not found", uuid)));
+        return Err(Error::not_found(format!("Match {} not found", uuid)));
     };
 
     // Create battle struct
@@ -142,7 +143,7 @@ pub async fn create<T>(
     Extension(model): Extension<Model<T>>,
     State(state): State<AppState>,
     Payload(request): Payload<CreateBattleRequest>,
-) -> Result<(StatusCode, AppJson<Battle>), AppError>
+) -> Result<(StatusCode, AppJson<Battle>), Error>
 where
     T: mmr::Model + 'static,
 {
@@ -214,7 +215,7 @@ where
                     extra: player.extra.take(),
                 };
 
-                Some(Rating::<T::Data>::try_from(rating).map_err(AppError::new)?)
+                Some(Rating::<T::Data>::try_from(rating).map_err(Error::new)?)
             } else {
                 None
             };
@@ -253,7 +254,7 @@ where
             })
         } else {
             tx.rollback().await?;
-            return Err(AppErrorKind::MissingParticipant(input_player.id.clone()).into());
+            return Err(ErrorKind::MissingParticipant(input_player.id.clone()).into());
         }
     }
 
@@ -292,7 +293,7 @@ pub async fn update<T>(
     Extension(model): Extension<Model<T>>,
     State(state): State<AppState>,
     Payload(request): Payload<UpdateBattleRequest>,
-) -> Result<AppJson<Battle>, AppError>
+) -> Result<AppJson<Battle>, Error>
 where
     T: Debug + mmr::Model + 'static,
     T::Data: Debug,
@@ -325,7 +326,7 @@ where
     .await?;
 
     let Some(mut battle_query) = battle_query else {
-        return Err(AppError::not_found(format!("Match {} not found", uuid)));
+        return Err(Error::not_found(format!("Match {} not found", uuid)));
     };
 
     // Verify changes
@@ -334,7 +335,7 @@ where
         .map(|s| s != battle_query.status)
         .unwrap_or(false);
     if battle_query.status != BattleStatus::Ongoing {
-        return Err(AppErrorKind::AlreadyConcluded(uuid).into());
+        return Err(ErrorKind::AlreadyConcluded(uuid).into());
     }
 
     let mut set_concluded = None::<DateTime<Utc>>;
@@ -430,7 +431,7 @@ pub async fn preload_participants<T>(
     model: &Model<T>,
     battle: &mut Battle,
     conn: &mut SqliteConnection,
-) -> Result<(), AppError>
+) -> Result<(), Error>
 where
     T: mmr::Model + 'static,
 {
@@ -488,7 +489,7 @@ where
                 };
 
                 Rating::<T::Data>::try_from(rating)
-                    .map_err(AppError::new)
+                    .map_err(Error::new)
                     .map(|rating| (p, Some(rating)))
             } else {
                 Ok((p, None))
@@ -515,7 +516,7 @@ where
     Ok(())
 }
 
-async fn get_battle_id(match_id: Uuid, conn: &mut SqliteConnection) -> Result<i32, AppError> {
+async fn get_battle_id(match_id: Uuid, conn: &mut SqliteConnection) -> Result<i32, Error> {
     #[derive(FromRow)]
     struct BattleQuery {
         id: i32,
@@ -531,7 +532,7 @@ async fn get_battle_id(match_id: Uuid, conn: &mut SqliteConnection) -> Result<i3
     .await?;
 
     let Some(battle) = battle else {
-        return Err(AppError::not_found(format!("Match {} not found", match_id)));
+        return Err(Error::not_found(format!("Match {} not found", match_id)));
     };
 
     Ok(battle.id)

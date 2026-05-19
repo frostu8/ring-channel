@@ -18,8 +18,9 @@ use tracing::instrument;
 use uuid::Uuid;
 
 use crate::{
-    app::{AppError, AppJson, AppState, Model, Payload, error::AppErrorKind},
+    app::{AppJson, AppState, Model, Payload},
     auth::api_key::ServerAuthentication,
+    error::{Error, ErrorKind},
     player::mmr::{self, Rating, RawRating},
 };
 
@@ -31,7 +32,7 @@ pub async fn update<T>(
     Extension(model): Extension<Model<T>>,
     State(state): State<AppState>,
     Payload(request): Payload<UpdatePlayerPlacementRequest>,
-) -> Result<AppJson<Participant>, AppError>
+) -> Result<AppJson<Participant>, Error>
 where
     T: mmr::Model + 'static,
 {
@@ -72,12 +73,12 @@ where
     .await?;
 
     let Some(battle) = battle else {
-        return Err(AppError::not_found(format!("Match {} not found", uuid)));
+        return Err(Error::not_found(format!("Match {} not found", uuid)));
     };
 
     // if the battle is closed, it cannot be updated anymore
     if battle.status != BattleStatus::Ongoing {
-        return Err(AppErrorKind::AlreadyConcluded(uuid).into());
+        return Err(ErrorKind::AlreadyConcluded(uuid).into());
     }
 
     // find the battle participant
@@ -107,7 +108,7 @@ where
 
     let Some(participant) = participant else {
         // The player with that RRID does not exist.
-        return Err(AppError::not_found(format!(
+        return Err(Error::not_found(format!(
             "Player w/ id {} does not exist",
             short_id
         )));
@@ -118,7 +119,7 @@ where
         (participant.id, participant.team, participant.no_contest)
     else {
         // the player is not participating!
-        return Err(AppError::not_found(format!(
+        return Err(Error::not_found(format!(
             "Player {} not participating in match",
             participant.display_name
         )));
@@ -153,7 +154,7 @@ where
             extra: participant.extra,
         };
 
-        Some(Rating::<T::Data>::try_from(rating).map_err(AppError::new)?)
+        Some(Rating::<T::Data>::try_from(rating).map_err(Error::new)?)
     } else {
         None
     };
@@ -165,7 +166,7 @@ where
             public_key: None,
             display_name: participant.display_name,
         },
-        team: PlayerTeam::try_from(team).map_err(AppError::new)?,
+        team: PlayerTeam::try_from(team).map_err(Error::new)?,
         finish_time: finish_time.or(request.finish_time),
         no_contest,
         skin: participant.skin,

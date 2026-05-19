@@ -17,7 +17,7 @@ use ring_channel_model::{
 use sqlx::{FromRow, SqliteConnection};
 
 use crate::{
-    app::AppError,
+    error::Error,
     player::mmr::{Model, RatingRecord, RawRatingRecord, update_rating},
     room::Room,
 };
@@ -67,7 +67,7 @@ pub async fn update_participant_ratings<T>(
     battle_id: i32,
     model: &T,
     conn: &mut SqliteConnection,
-) -> Result<(), AppError>
+) -> Result<(), Error>
 where
     T: Model + Debug,
     T::Data: Debug,
@@ -97,7 +97,7 @@ where
     // Only update if there was more than 1 participant
     if ratings.len() > 1 {
         for rating in ratings {
-            let rating = RatingRecord::<T::Data>::try_from(rating).map_err(AppError::new)?;
+            let rating = RatingRecord::<T::Data>::try_from(rating).map_err(Error::new)?;
             update_rating(&rating, model, &mut *conn).await?;
         }
     }
@@ -110,7 +110,7 @@ pub async fn calculate_winnings(
     battle_id: i32,
     room: &Room,
     conn: &mut SqliteConnection,
-) -> Result<(), AppError> {
+) -> Result<(), Error> {
     #[derive(FromRow)]
     struct ParticipantQuery {
         #[sqlx(try_from = "u8")]
@@ -256,7 +256,7 @@ async fn get_total_pot(
     battle_id: i32,
     team: PlayerTeam,
     conn: &mut SqliteConnection,
-) -> Result<i64, AppError> {
+) -> Result<i64, Error> {
     sqlx::query_as::<_, (i64,)>(
         r#"
         SELECT SUM(w.mobiums)
@@ -271,5 +271,5 @@ async fn get_total_pot(
     .fetch_one(&mut *conn)
     .await
     .map(|(mobiums,)| mobiums)
-    .map_err(AppError::from)
+    .map_err(Error::from)
 }

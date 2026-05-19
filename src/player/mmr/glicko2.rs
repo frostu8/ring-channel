@@ -7,7 +7,7 @@ use std::{f32::consts::PI, sync::Arc};
 use chrono::TimeDelta;
 use serde::{Deserialize, Serialize};
 
-use crate::app::AppError;
+use crate::error::Error;
 
 use super::{Model, ModelData, Rating, RatingRecord};
 
@@ -36,7 +36,7 @@ impl From<Glicko2Config> for Glicko2 {
 impl Model for Glicko2 {
     type Data = Glicko2Data;
 
-    async fn create_rating(&self, player_id: i32) -> Result<Rating<Self::Data>, AppError> {
+    async fn create_rating(&self, player_id: i32) -> Result<Rating<Self::Data>, Error> {
         Ok(Rating {
             player_id,
             rating: self.config.defaults.rating,
@@ -52,7 +52,7 @@ impl Model for Glicko2 {
         rating: &RatingRecord<Self::Data>,
         matchups: &[super::Matchup<Self::Data>],
         period_elapsed: f32,
-    ) -> Result<Rating<Self::Data>, AppError> {
+    ) -> Result<Rating<Self::Data>, Error> {
         let matchups = matchups
             .iter()
             .map(|matchup| Matchup {

@@ -8,7 +8,7 @@ use ring_channel_model::user::UserFlags;
 
 use sqlx::SqliteConnection;
 
-use crate::{app::AppError, config::WagerBotConfig};
+use crate::{config::WagerBotConfig, error::Error};
 
 /// Gets the user information of the wager bot.
 ///
@@ -16,7 +16,7 @@ use crate::{app::AppError, config::WagerBotConfig};
 pub async fn get_wager_bot(
     config: &WagerBotConfig,
     conn: &mut SqliteConnection,
-) -> Result<UserSchema, AppError> {
+) -> Result<UserSchema, Error> {
     let now = Utc::now();
 
     let query = sqlx::query_as::<_, UserSchema>(

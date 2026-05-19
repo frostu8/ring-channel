@@ -23,8 +23,8 @@ use sqlx::{FromRow, SqliteConnection};
 use tracing::instrument;
 
 use crate::{
-    app::{AppError, error::AppErrorKind},
     auth::oauth2::{OauthState, Session},
+    error::{Error, ErrorKind},
 };
 
 #[derive(FromRow)]
@@ -45,7 +45,7 @@ pub struct LoginResponse {
 pub async fn redirect(
     mut session: Session,
     State(oauth_state): State<OauthState>,
-) -> Result<Redirect, AppError> {
+) -> Result<Redirect, Error> {
     session.shuffle_csrf().await?;
 
     // we now have a session, build the url
@@ -64,13 +64,13 @@ pub async fn login(
     Query(query): Query<LoginResponse>,
     mut session: Session,
     State(oauth_state): State<OauthState>,
-) -> Result<Redirect, AppError> {
+) -> Result<Redirect, Error> {
     // Check for CSRF
     if session.state != query.state {
         tracing::warn!("suspicious request w/ invalid state: {}", query.state);
         // FIXME: It doesn't seem right to send API errors on an endpoint
         // browsers are accessing?
-        return Err(AppErrorKind::InvalidState { state: query.state }.into());
+        return Err(ErrorKind::InvalidState { state: query.state }.into());
     }
 
     let now = Utc::now();
@@ -85,9 +85,9 @@ pub async fn login(
     let token_result = match token_result {
         Ok(token_result) => token_result,
         Err(RequestTokenError::Request(HttpClientError::Reqwest(err))) => {
-            Err(AppErrorKind::HttpClient(*err))?
+            Err(ErrorKind::HttpClient(*err))?
         }
-        Err(err) => Err(AppError::new(err))?,
+        Err(err) => Err(Error::new(err))?,
     };
 
     // Fetch user from Discord api
@@ -98,13 +98,13 @@ pub async fn login(
         .refresh_token()
         .cloned()
         .ok_or(UpdateTokenError::MissingRefreshToken)
-        .map_err(AppError::new)?
+        .map_err(Error::new)?
         .into_secret();
     let _expires_in = token_result
         .expires_in()
         .ok_or(UpdateTokenError::MissingExpiresIn)
         .map(|duration| now + duration)
-        .map_err(AppError::new)?;
+        .map_err(Error::new)?;
 
     let token = format!("Bearer {access_token}");
     let http_client = twilight_http::Client::builder().token(token).build();
@@ -114,7 +114,7 @@ pub async fn login(
         .await?
         .model()
         .await
-        .map_err(AppError::new)?;
+        .map_err(Error::new)?;
 
     tracing::debug!("committing authenticated Discord user");
 
@@ -201,7 +201,7 @@ pub enum UpdateTokenError {
 async fn try_create_user(
     remote_user: &DiscordUser,
     tx: &mut SqliteConnection,
-) -> Result<i32, AppError> {
+) -> Result<i32, Error> {
     let now = Utc::now();
 
     // user needs to be created

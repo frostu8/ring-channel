@@ -5,9 +5,9 @@ use axum::extract::{FromRef, FromRequestParts};
 use http::{header::HeaderName, request::Parts};
 use sqlx::FromRow;
 
-use crate::app::{
-    AppState,
-    error::{AppError, AppErrorKind},
+use crate::{
+    app::AppState,
+    error::{Error, ErrorKind},
 };
 
 use sha2::{Digest as _, Sha256};
@@ -37,7 +37,7 @@ where
     AppState: FromRef<S>,
     S: Send + Sync,
 {
-    type Rejection = AppError;
+    type Rejection = Error;
 
     async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, Self::Rejection> {
         // if the result was cached, simply return the cached value
@@ -87,10 +87,10 @@ where
                     Ok(auth)
                 }
                 // api key matches nothing
-                None => Err(AppErrorKind::ApiKeyBadCredentials.into()),
+                None => Err(ErrorKind::ApiKeyBadCredentials.into()),
             }
         } else {
-            Err(AppErrorKind::ApiKeyUnauthenticated.into())
+            Err(ErrorKind::ApiKeyUnauthenticated.into())
         }
     }
 }

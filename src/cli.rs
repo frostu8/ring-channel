@@ -6,7 +6,8 @@ use chrono::Utc;
 
 use clap::{Parser, Subcommand};
 
-use anyhow::Error;
+use eyre::Error;
+
 use sqlx::SqliteConnection;
 
 use crate::auth::api_key::{generate_api_key, hash_api_key};

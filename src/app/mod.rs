@@ -1,10 +1,6 @@
 //! Application interface and state.
 
-pub mod error;
-
 use std::{any::Any, sync::Arc};
-
-pub use error::AppError;
 
 use axum_valid::{Garde, GardeRejection, HasValidate};
 
@@ -23,7 +19,9 @@ use serde::de::DeserializeOwned;
 
 use sqlx::SqlitePool;
 
-use crate::{app::error::AppErrorKind, config::Config, player::mmr, room};
+use crate::{config::Config, player::mmr, room};
+
+use crate::error::{Error, ErrorKind};
 
 /// Shared app state.
 ///
@@ -53,7 +51,7 @@ where
 {
     type Data = T::Data;
 
-    async fn create_rating(&self, player_id: i32) -> Result<mmr::Rating<Self::Data>, AppError> {
+    async fn create_rating(&self, player_id: i32) -> Result<mmr::Rating<Self::Data>, Error> {
         self.inner.create_rating(player_id).await
     }
 
@@ -62,7 +60,7 @@ where
         rating: &mmr::RatingRecord<Self::Data>,
         matchups: &[mmr::Matchup<Self::Data>],
         period_elapsed: f32,
-    ) -> Result<mmr::Rating<Self::Data>, AppError> {
+    ) -> Result<mmr::Rating<Self::Data>, Error> {
         self.inner.rate(rating, matchups, period_elapsed).await
     }
 
@@ -109,7 +107,7 @@ pub struct Unrated;
 impl mmr::Model for Unrated {
     type Data = ();
 
-    async fn create_rating(&self, _player_id: i32) -> Result<mmr::Rating<Self::Data>, AppError> {
+    async fn create_rating(&self, _player_id: i32) -> Result<mmr::Rating<Self::Data>, Error> {
         unimplemented!()
     }
 
@@ -118,7 +116,7 @@ impl mmr::Model for Unrated {
         _rating: &mmr::RatingRecord<Self::Data>,
         _matchups: &[mmr::Matchup<Self::Data>],
         _period_elapsed: f32,
-    ) -> Result<mmr::Rating<Self::Data>, AppError> {
+    ) -> Result<mmr::Rating<Self::Data>, Error> {
         unimplemented!()
     }
 
@@ -138,7 +136,7 @@ where
     T: DeserializeOwned + 'static,
     S: Send + Sync,
 {
-    type Rejection = AppError;
+    type Rejection = Error;
 
     async fn from_request(req: Request, state: &S) -> Result<Self, Self::Rejection> {
         // switch on content type
@@ -146,7 +144,7 @@ where
             .headers()
             .get(header::CONTENT_TYPE)
             .and_then(|value| value.to_str().ok())
-            .ok_or_else(|| AppErrorKind::MissingContentType)?;
+            .ok_or_else(|| ErrorKind::MissingContentType)?;
 
         match content_type {
             "application/x-www-form-urlencoded" => {
@@ -157,7 +155,7 @@ where
                 let AppJson(json) = req.extract_with_state::<AppJson<T>, _, _>(state).await?;
                 Ok(Payload(json))
             }
-            mime => Err(AppErrorKind::UnsupportedContentType(mime.to_owned()).into()),
+            mime => Err(ErrorKind::UnsupportedContentType(mime.to_owned()).into()),
         }
     }
 }
@@ -170,18 +168,18 @@ impl<S, T> FromRequestParts<S> for AppGarde<T>
 where
     S: Send + Sync,
     T: FromRequestParts<S> + HasValidate + 'static,
-    AppError: From<<T as FromRequestParts<S>>::Rejection>,
+    Error: From<<T as FromRequestParts<S>>::Rejection>,
     <T as HasValidate>::Validate: Validate,
     <<T as HasValidate>::Validate as Validate>::Context: Send + Sync + FromRef<S>,
 {
-    type Rejection = AppError;
+    type Rejection = Error;
 
     async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, Self::Rejection> {
         let valid = parts.extract_with_state::<Garde<T>, S>(state).await;
 
         match valid {
             Ok(Garde(valid)) => Ok(AppGarde(valid)),
-            Err(GardeRejection::Valid(garde)) => Err(AppErrorKind::Garde(garde).into()),
+            Err(GardeRejection::Valid(garde)) => Err(ErrorKind::Garde(garde).into()),
             Err(GardeRejection::Inner(err)) => Err(err.into()),
         }
     }
@@ -191,18 +189,18 @@ impl<S, T> FromRequest<S> for AppGarde<T>
 where
     S: Send + Sync,
     T: FromRequest<S> + HasValidate + 'static,
-    AppError: From<<T as FromRequest<S>>::Rejection>,
+    Error: From<<T as FromRequest<S>>::Rejection>,
     <T as HasValidate>::Validate: Validate,
     <<T as HasValidate>::Validate as Validate>::Context: Send + Sync + FromRef<S>,
 {
-    type Rejection = AppError;
+    type Rejection = Error;
 
     async fn from_request(request: Request, state: &S) -> Result<Self, Self::Rejection> {
         let valid = request.extract_with_state::<Garde<T>, S, _>(state).await;
 
         match valid {
             Ok(Garde(valid)) => Ok(AppGarde(valid)),
-            Err(GardeRejection::Valid(garde)) => Err(AppErrorKind::Garde(garde).into()),
+            Err(GardeRejection::Valid(garde)) => Err(ErrorKind::Garde(garde).into()),
             Err(GardeRejection::Inner(err)) => Err(err.into()),
         }
     }
@@ -219,7 +217,7 @@ where
 
 /// App Form extractor and responder.
 #[derive(Deref, FromRequest)]
-#[from_request(via(Form), rejection(AppError))]
+#[from_request(via(Form), rejection(Error))]
 pub struct AppForm<T>(pub T);
 
 impl<T> HasValidate for AppForm<T> {
@@ -241,7 +239,7 @@ where
 
 /// App JSON extractor and responder.
 #[derive(Deref, FromRequest)]
-#[from_request(via(Json), rejection(AppError))]
+#[from_request(via(Json), rejection(Error))]
 pub struct AppJson<T>(pub T);
 
 impl<T> HasValidate for AppJson<T> {

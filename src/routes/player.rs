@@ -16,8 +16,9 @@ use sqlx::FromRow;
 use tracing::instrument;
 
 use crate::{
-    app::{AppError, AppJson, AppState, Model, Payload},
+    app::{AppJson, AppState, Model, Payload},
     auth::api_key::ServerAuthentication,
+    error::Error,
     player::{
         create_player, get_player,
         mmr::{self, Rating, RawRating, init_rating},
@@ -32,7 +33,7 @@ pub async fn show<T>(
     Path((short_id,)): Path<(String,)>,
     Extension(model): Extension<Model<T>>,
     State(state): State<AppState>,
-) -> Result<AppJson<Player>, AppError>
+) -> Result<AppJson<Player>, Error>
 where
     T: mmr::Model + 'static,
 {
@@ -40,9 +41,7 @@ where
 
     get_player(&short_id, &mut conn)
         .await
-        .and_then(|f| {
-            f.ok_or_else(|| AppError::not_found(format!("Player {} not found", short_id)))
-        })
+        .and_then(|f| f.ok_or_else(|| Error::not_found(format!("Player {} not found", short_id))))
         .and_then(|player| player.normalize(&model))
         .map(|player| AppJson(player))
 }
@@ -56,7 +55,7 @@ pub async fn register<T>(
     Extension(model): Extension<Model<T>>,
     State(state): State<AppState>,
     Payload(request): Payload<RegisterPlayerRequest>,
-) -> Result<(StatusCode, AppJson<Player>), AppError>
+) -> Result<(StatusCode, AppJson<Player>), Error>
 where
     T: mmr::Model + 'static,
 {
@@ -99,7 +98,7 @@ where
                 extra: player.extra,
             };
 
-            Some(Rating::<T::Data>::try_from(rating).map_err(AppError::new)?)
+            Some(Rating::<T::Data>::try_from(rating).map_err(Error::new)?)
         } else {
             None
         };

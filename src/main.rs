@@ -1,5 +1,6 @@
 use std::{env, fmt::Debug, io, net::SocketAddr, path::PathBuf, sync::Arc};
 
+use eyre::OptionExt as _;
 use http::{HeaderValue, Method, header};
 
 // :(
@@ -18,15 +19,14 @@ use axum::{
 use axum_server::Handle;
 
 use ring_channel::{
-    app::{AppError, AppState, Model, Unrated},
+    app::{AppState, Model, Unrated},
     auth::oauth2::OauthState,
     cli::{self, Args, Command, MmrCommand, MmrDump},
     config::{Config, RatingModelConfig, read_config},
+    error::Error,
     player::mmr::{self, glicko2::Glicko2, init_rating, next_rating_period, openskill::OpenSkill},
     room, routes,
 };
-
-use anyhow::Error;
 
 use sqlx::{Connection, SqliteConnection, pool::PoolOptions};
 
@@ -54,7 +54,7 @@ const OPENAPI_FILE: &str =
     include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/openapi/openapi.yaml"));
 
 #[main]
-async fn main() -> Result<(), Error> {
+async fn main() -> eyre::Result<()> {
     dotenv::dotenv().ok();
 
     let registry = tracing_subscriber::registry();
@@ -94,7 +94,7 @@ async fn main() -> Result<(), Error> {
     }
 }
 
-async fn with_rating_model<T>(cli: Args, mut config: Config, model: T) -> Result<(), Error>
+async fn with_rating_model<T>(cli: Args, mut config: Config, model: T) -> eyre::Result<()>
 where
     T: Debug + Clone + Send + Sync + mmr::Model + 'static,
     T::Data: Debug,
@@ -103,7 +103,7 @@ where
         .server
         .database_url
         .take()
-        .ok_or_else(|| Error::msg("No `DATABASE_URL` set!"))?;
+        .ok_or_eyre("No `DATABASE_URL` set!")?;
 
     // Run any pending commands
     if let Some(command) = cli.command.as_ref() {
@@ -286,7 +286,7 @@ where
     // Create session management
     let db_session_store = SqliteStore::new(db.clone())
         .with_table_name("_session")
-        .map_err(Error::msg)?;
+        .map_err(eyre::Report::msg)?;
     db_session_store.migrate().await?;
 
     let caching_session_store = MokaStore::new(Some(2_000));
@@ -420,8 +420,8 @@ async fn security_headers(request: Request, next: Next) -> Response {
 // Stolen from: https://github.com/tokio-rs/axum/blob/main/examples/error-handling/src/main.rs
 async fn log_app_errors(request: Request, next: Next) -> Response {
     let response = next.run(request).await;
-    // If the response contains an AppError Extension, log it.
-    if let Some(err) = response.extensions().get::<Arc<AppError>>() {
+    // If the response contains an Error Extension, log it.
+    if let Some(err) = response.extensions().get::<Arc<Error>>() {
         tracing::error!(?err, "an unexpected error occurred inside a handler");
     }
     response

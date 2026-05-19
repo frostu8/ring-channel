@@ -18,7 +18,7 @@ use serde::{
 use sqlx::{FromRow, SqliteConnection};
 use tracing::instrument;
 
-use crate::app::AppError;
+use crate::error::Error;
 
 /// A rating model.
 pub trait Model: Send + Sync {
@@ -29,7 +29,7 @@ pub trait Model: Send + Sync {
     fn create_rating(
         &self,
         player_id: i32,
-    ) -> impl Future<Output = Result<Rating<Self::Data>, AppError>> + Send + Sync;
+    ) -> impl Future<Output = Result<Rating<Self::Data>, Error>> + Send + Sync;
 
     /// Rates a player's performance.
     ///
@@ -39,7 +39,7 @@ pub trait Model: Send + Sync {
         rating: &RatingRecord<Self::Data>,
         matchups: &[Matchup<Self::Data>],
         period_elapsed: f32,
-    ) -> impl Future<Output = Result<Rating<Self::Data>, AppError>> + Send + Sync;
+    ) -> impl Future<Output = Result<Rating<Self::Data>, Error>> + Send + Sync;
 
     /// The time between rating periods.
     fn period(&self) -> TimeDelta;
@@ -248,14 +248,14 @@ async fn catalog_rating<T>(
     period: &RatingPeriod,
     rating: &Rating<T>,
     conn: &mut SqliteConnection,
-) -> Result<(), AppError>
+) -> Result<(), Error>
 where
     T: Serialize + 'static,
 {
     let now = Utc::now();
 
     // serialize extra data
-    let extra = serialize_extra(&rating.extra).map_err(AppError::new)?;
+    let extra = serialize_extra(&rating.extra).map_err(Error::new)?;
 
     sqlx::query(
         r#"
@@ -275,7 +275,7 @@ where
     .execute(&mut *conn)
     .await
     .map(|_| ())
-    .map_err(AppError::from)
+    .map_err(Error::from)
 }
 
 /// Initializes a player rating, and inserts it into the database.
@@ -283,7 +283,7 @@ pub async fn init_rating<T>(
     player_id: i32,
     model: &T,
     conn: &mut SqliteConnection,
-) -> Result<Rating<T::Data>, AppError>
+) -> Result<Rating<T::Data>, Error>
 where
     T: Model,
 {
@@ -292,7 +292,7 @@ where
     let default_rating = model.create_rating(player_id).await?;
 
     // serialize extra data
-    let extra = serialize_extra(&default_rating.extra).map_err(AppError::new)?;
+    let extra = serialize_extra(&default_rating.extra).map_err(Error::new)?;
 
     let result = sqlx::query(
         r#"
@@ -379,7 +379,7 @@ pub async fn update_rating<T>(
     rating: &RatingRecord<T::Data>,
     model: &T,
     conn: &mut SqliteConnection,
-) -> Result<Rating<T::Data>, AppError>
+) -> Result<Rating<T::Data>, Error>
 where
     T: Model + Debug,
     T::Data: Debug,
@@ -402,7 +402,7 @@ where
     tracing::debug!(?new_rating, "updating rating for");
 
     // serialize extra data
-    let extra = serialize_extra(&new_rating.extra).map_err(AppError::new)?;
+    let extra = serialize_extra(&new_rating.extra).map_err(Error::new)?;
 
     // Update the rating in-database
     sqlx::query(
@@ -431,7 +431,7 @@ where
 pub async fn next_rating_period<T>(
     model: &T,
     conn: &mut SqliteConnection,
-) -> Result<RatingPeriod, AppError>
+) -> Result<RatingPeriod, Error>
 where
     T: Model,
 {
@@ -444,7 +444,7 @@ pub async fn next_rating_period_at<T>(
     model: &T,
     now: DateTime<Utc>,
     conn: &mut SqliteConnection,
-) -> Result<RatingPeriod, AppError>
+) -> Result<RatingPeriod, Error>
 where
     T: Model,
 {
@@ -525,7 +525,7 @@ where
 
         // Update all player's ratings
         for player in players {
-            let player = player.map_err(AppError::new)?;
+            let player = player.map_err(Error::new)?;
 
             // All players get their rating rolled over if they had one.
             // Fetch the player's matchups
@@ -540,7 +540,7 @@ where
             let now = Utc::now();
 
             // serialize extra data
-            let extra = serialize_extra(&new_rating.extra).map_err(AppError::new)?;
+            let extra = serialize_extra(&new_rating.extra).map_err(Error::new)?;
 
             // Update the player's existing rating
             sqlx::query(
@@ -576,7 +576,7 @@ async fn fetch_matchups<T>(
     from: DateTime<Utc>,
     to: DateTime<Utc>,
     conn: &mut SqliteConnection,
-) -> Result<Vec<Matchup<T>>, AppError>
+) -> Result<Vec<Matchup<T>>, Error>
 where
     T: DeserializeOwned + 'static,
 {
@@ -595,7 +595,7 @@ where
         })
         .map(|matchup| Matchup::<T>::try_from(matchup))
         .collect::<Result<Vec<_>, _>>()
-        .map_err(AppError::new)
+        .map_err(Error::new)
 }
 
 /// Calculates the MMR for all players in the last rating period.
@@ -603,7 +603,7 @@ pub async fn dump_rating<T, W: std::io::Write>(
     mut writer: W,
     model: &T,
     conn: &mut SqliteConnection,
-) -> Result<(), anyhow::Error>
+) -> eyre::Result<()>
 where
     T: Model,
 {
@@ -800,7 +800,7 @@ mod tests {
         async fn get_rating(
             short_id: &str,
             conn: &mut SqliteConnection,
-        ) -> anyhow::Result<Rating<OpenSkillData>> {
+        ) -> eyre::Result<Rating<OpenSkillData>> {
             get_player(&short_id, &mut *conn)
                 .await?
                 .and_then(|r| match r.rating.zip(r.deviation) {
@@ -812,7 +812,7 @@ mod tests {
                     }),
                     None => None,
                 })
-                .ok_or_else(|| anyhow::anyhow!("player doesn't exist"))?
+                .ok_or_else(|| eyre::eyre!("player doesn't exist"))?
                 .try_into()
                 .map_err(From::from)
         }
