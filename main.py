@@ -91,60 +91,66 @@ def from_dict(ty: Type[T], data: dict) -> T:
 
 # Start loop
 # Listen for requests
-for line in sys.stdin:
-    line = line.strip()
+def run():
+    for line in sys.stdin:
+        line = line.strip()
 
-    # Parse request
-    data = json.loads(line)
-    name = data["type"]
-    match name:
-        case "UpdateConfig":
-            config = from_dict(ModelConfig, data["config"])
+        # Parse request
+        data = json.loads(line)
+        name = data["type"]
+        match name:
+            case "UpdateConfig":
+                config = from_dict(ModelConfig, data["config"])
 
-            # Update new details
-            model.tau = config.tau
+                # Update new details
+                model.tau = config.tau
 
-            model.mu = config.defaults.rating
-            model.sigma = config.defaults.deviation
+                model.mu = config.defaults.rating
+                model.sigma = config.defaults.deviation
 
-            resp = {
-                "type": "UpdateConfig",
-            }
-        case "CreateRating":
-            id = data["player_id"]
+                resp = {
+                    "type": "UpdateConfig",
+                }
+            case "CreateRating":
+                id = data["player_id"]
 
-            # Make a rating in the model
-            rating = model.rating(name=str(id))
+                # Make a rating in the model
+                rating = model.rating(name=str(id))
 
-            resp = {
-                "type": "CreateRating",
-                "rating": asdict(Rating.frommodel(rating)),
-            }
-        case "Rate":
-            rating = from_dict(RatingRecord, data["rating"])
-            matchups = [from_dict(Matchup, d) for d in data["matchups"]]
+                resp = {
+                    "type": "CreateRating",
+                    "rating": asdict(Rating.frommodel(rating)),
+                }
+            case "Rate":
+                rating = from_dict(RatingRecord, data["rating"])
+                matchups = [from_dict(Matchup, d) for d in data["matchups"]]
 
-            # Create rating in model
-            new_rating = rating.tomodel()
+                # Create rating in model
+                new_rating = rating.tomodel()
 
-            # Assess new rating
-            for matchup in matchups:
-                opponent_rating = matchup.opponent.tomodel()
-                opponent_position = 3 - matchup.position
+                # Assess new rating
+                for matchup in matchups:
+                    opponent_rating = matchup.opponent.tomodel()
+                    opponent_position = 3 - matchup.position
 
-                [[new_rating], _] = model.rate(
-                    [[new_rating], [opponent_rating]],
-                    [matchup.position, opponent_position],
-                    limit_sigma=True,
-                )
+                    [[new_rating], _] = model.rate(
+                        [[new_rating], [opponent_rating]],
+                        [matchup.position, opponent_position],
+                        limit_sigma=True,
+                    )
 
-            # Return result
-            resp = {
-                "type": "Rate",
-                "new_rating": asdict(Rating.frommodel(new_rating)),
-            }
-        case _:
-            raise ValueError(f"unexpected event {name}")
+                # Return result
+                resp = {
+                    "type": "Rate",
+                    "new_rating": asdict(Rating.frommodel(new_rating)),
+                }
+            case _:
+                raise ValueError(f"unexpected event {name}")
 
-    sys.stdout.write(f"{json.dumps(resp)}\n")
-    sys.stdout.flush()
+        sys.stdout.write(f"{json.dumps(resp)}\n")
+        sys.stdout.flush()
+
+try:
+    run()
+except KeyboardInterrupt:
+    pass
