@@ -22,6 +22,8 @@ tags:
     description: Endpoints that operate only on players.
   - name: user
     description: Humans that access the application.
+  - name: server
+    description: Endpoints for servers.
 
 components:
   securitySchemes:
@@ -270,6 +272,47 @@ components:
           The match ended abnormally. It may not have a victor, and wagers were
           returned.
       enum: [0, 1, 2]
+    Server:
+      type: object
+      required:
+        - id
+        - name
+        - bans
+      properties:
+        id:
+          type: integer
+          description: The unique identifier of the server.
+        name:
+          type: string
+          description: >
+            The human-readable name of the server, typically defined by the server
+            owner.
+        bans:
+          type: object
+          additionalProperties:
+            $ref: "#/components/schemas/MapConfig"
+    MapConfig:
+      type: object
+      required:
+        - status
+      properties:
+        status:
+          $ref: "#/components/schemas/BannedStatus"
+        note:
+          type: string
+          description: An optional user-defined note on the map.
+    BannedStatus:
+      type: integer
+      description: >
+        The status of a match.
+
+        * `0` **Blacklist**  
+          The map is banned and not in play.
+        * `1` **Whitelist**  
+          The map is not banned.
+        * `2` **Suspect**  
+          The map is not banned. This is purely informational.
+      enum: [0, 1, 2]
     Error:
       type: object
       description: >
@@ -325,6 +368,16 @@ components:
         mobiums: 143
         victor: 0
         updated_at: 2025-10-24T05:37:07.578866465Z
+    serverExample:
+      value:
+        id: 420
+        name: The Big Ben
+        bans:
+          RR_GreenTriangle:
+            status: 1
+            note: Awesome map.
+          RR_ScarletGardens:
+            status: 0
     apiKeyUnauthenticatedExample:
       value:
         message: No API key passed; set an X-API-Key header!
@@ -886,6 +939,33 @@ paths:
               examples:
                 apiKeyUnauthenticatedExample:
                   $ref: "#/components/examples/apiKeyUnauthenticatedExample"
+  /servers/~me:
+    get:
+      tags:
+        - server
+      summary: Fetch Current Server
+      description: >
+        Displays information about the server currently authenticated by the
+        given token.
+      security:
+        - apiKey: []
+      operationId: fetch_current_server
+      responses:
+        "200":
+          description: The server.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Server"
+              examples:
+                serverExample:
+                  $ref: "#/components/examples/serverExample"
+        "401":
+          description: Client is unauthenticated.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
   /users/~me:
     get:
       tags:

@@ -28,7 +28,15 @@ pub const API_KEY_LENGTH: usize = 64;
 /// Servers can only authenticate with an API key.
 #[derive(Clone, Debug)]
 pub struct ServerAuthentication {
+    /// The id of the server in the database.
+    pub id: i32,
     /// The canonical name of the server.
+    pub server_name: String,
+}
+
+#[derive(FromRow)]
+struct ServerQuery {
+    pub id: i32,
     pub server_name: String,
 }
 
@@ -56,19 +64,13 @@ where
 
             // hash token
             let hash = hash_api_key(key);
-
-            // search database for record
-            #[derive(FromRow)]
-            struct ServerQuery {
-                server_name: String,
-            }
-
             let server = sqlx::query_as::<_, ServerQuery>(
                 r#"
                 SELECT
-                    server_name
+                    s.id,
+                    s.server_name
                 FROM
-                    server
+                    server s
                 WHERE
                     key_hash = $1
                 "#,
@@ -78,8 +80,8 @@ where
             .await?;
 
             match server {
-                Some(ServerQuery { server_name }) => {
-                    let auth = ServerAuthentication { server_name };
+                Some(ServerQuery { id, server_name }) => {
+                    let auth = ServerAuthentication { id, server_name };
 
                     // cache toe xtensions
                     parts.extensions.insert(auth.clone());

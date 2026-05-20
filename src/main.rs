@@ -257,6 +257,12 @@ where
                 ),
         )
         .nest(
+            "/servers",
+            Router::<AppState>::new()
+                .route("/~me", get(routes::server::show_self))
+                .route("/~me", patch(routes::server::update)),
+        )
+        .nest(
             "/chat",
             Router::<AppState>::new().route("/messages", post(routes::chat::create::<T>)),
         )

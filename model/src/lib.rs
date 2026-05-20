@@ -7,6 +7,7 @@ pub mod message;
 pub mod player;
 pub mod request;
 pub mod response;
+pub mod server;
 pub mod user;
 
 pub use battle::{Battle, BattleWager};
